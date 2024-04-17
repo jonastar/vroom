@@ -2,9 +2,11 @@
 
 mod actions;
 mod audio;
+mod car;
 mod loading;
 mod menu;
 mod player;
+mod scene;
 
 use crate::actions::ActionsPlugin;
 use crate::audio::InternalAudioPlugin;
@@ -16,6 +18,8 @@ use bevy::app::App;
 #[cfg(debug_assertions)]
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
+use car::CarPlugin;
+use scene::ScenePlugin;
 
 // This example game uses States to separate logic
 // See https://bevy-cheatbook.github.io/programming/states.html
@@ -40,7 +44,9 @@ impl Plugin for GamePlugin {
             MenuPlugin,
             ActionsPlugin,
             InternalAudioPlugin,
-            PlayerPlugin,
+            // PlayerPlugin,
+            ScenePlugin,
+            CarPlugin,
         ));
 
         #[cfg(debug_assertions)]
