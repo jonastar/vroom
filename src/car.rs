@@ -31,7 +31,7 @@ struct FrontWheelMain {
 }
 
 #[derive(Component)]
-struct FrontWheelParent;
+struct Wheel;
 
 #[derive(Component)]
 pub struct CarBody;
@@ -167,7 +167,7 @@ fn spawn_wheel(
             Velocity::zero(),
             ExternalImpulse::default(),
             ImpulseJoint::new(body, joint),
-            FrontWheelParent,
+            Wheel,
         ))
         .with_children(|wheel| {
             let mut builder = wheel.spawn((
@@ -192,70 +192,24 @@ fn despawn_car() {}
 fn move_car(
     time: Res<Time>,
     actions: Res<Actions>,
-    mut car_query: Query<(&mut ExternalImpulse, &Transform), With<CarBody>>,
+    mut car_query: Query<(&mut ExternalImpulse, &Transform, &mut ImpulseJoint), With<Wheel>>,
 ) {
-    let Some(input) = actions.player_movement else {
-        return;
-    };
+    let input = actions.player_movement.unwrap_or_default();
+    // let Some(input) = actions.player_movement else {
+    //     return;
+    // };
 
     let move_speed = 20.0;
-    if !input.y.is_zero() {
-        let rotate_speed = 10.;
-
-        if !input.x.is_zero() {
-            for (mut car_impulse, _) in &mut car_query {
-                // car_impulse.torque_impulse += Vec3 {
-                //     x: 0.0,
-                //     y: (-input.x * input.y) * rotate_speed * time.delta_seconds(),
-                //     z: 0.0,
-                // };
-
-                // let up = car_impulse.up();
-
-                // car_impulse.rotate_axis(
-                //     up.into(),
-                //     (-input.x * input.y) * rotate_speed * time.delta_seconds(),
-                // );
-            }
-        }
-
-        for (mut car_impulse, transform) in &mut car_query {
-            let dir = transform.forward();
-            car_impulse.impulse = dir * input.y * move_speed * time.delta_seconds()
-            // car_impulse.translation += dir * input.y * move_speed * time.delta_seconds();
-        }
+    // if !input.y.is_zero() {
+    for (mut impulse, transform, mut joint) in &mut car_query {
+        joint
+            .data
+            .set_motor_velocity(JointAxis::AngX, move_speed * -input.y, 0.0);
+        // let dir = transform.left();
+        // joint.data
+        // impulse.torque_impulse += input.y * *dir * move_speed * time.delta_seconds();
     }
-}
-
-fn rotate_car(
-    time: Res<Time>,
-    actions: Res<Actions>,
-    mut car_query: Query<(&mut ExternalImpulse, &Velocity, &Transform), With<CarBody>>,
-) {
-    let Some(input) = actions.player_movement else {
-        return;
-    };
-
-    if !input.x.is_zero() {
-        let rotate_speed = 10.;
-
-        for (mut car_impulse, vel, transform) in &mut car_query {
-            let forward = transform.forward();
-            let vel_dir = vel.linvel.normalize_or_zero();
-            if vel_dir == Vec3::ZERO {
-                continue;
-            }
-
-            let angle = forward.angle_between(vel_dir).to_degrees().abs();
-            let turn_multiplier = (angle - 90.0) / 90.0;
-
-            car_impulse.torque_impulse += Vec3 {
-                x: 0.0,
-                y: input.x * rotate_speed * time.delta_seconds() * turn_multiplier,
-                z: 0.0,
-            };
-        }
-    }
+    // }
 }
 
 fn turn_front_wheels(
