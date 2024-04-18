@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 use crate::GameState;
 
@@ -27,16 +28,33 @@ fn spawn_scene(
     // plane
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
+            // mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
+            mesh: meshes.add(Cuboid::new(100.0, 0.5, 100.0)),
             material: materials.add(Color::rgb(0.3, 0.5, 0.3)),
+            transform: Transform::from_translation(Vec3 {
+                x: 0.0,
+                y: -0.25,
+                z: 0.0,
+            }),
             ..default()
         },
         Ground,
+        Collider::cuboid(50.0, 0.25, 50.0),
+        RigidBody::Fixed,
+        Friction {
+            coefficient: 1.0,
+            combine_rule: CoefficientCombineRule::Average,
+        },
     ));
 
     // light
     commands.spawn(DirectionalLightBundle {
-        transform: Transform::from_translation(Vec3::ONE).looking_at(Vec3::ZERO, Vec3::Y),
+        transform: Transform::from_translation(Vec3 {
+            x: -1.0,
+            y: 1.0,
+            z: 0.0,
+        })
+        .looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
 
@@ -125,8 +143,19 @@ fn spawn_box(
             transform: Transform::from_translation(position),
             ..default()
         },
-        Ground,
+        Collider::cuboid(0.5, 0.5, 0.5),
+        RigidBody::Fixed,
     ));
 }
 
 fn despawn_scene() {}
+
+pub fn camera_look_at<T: Component>(
+    mut camera: Query<&mut Transform, (With<Camera>, Without<T>)>,
+    target: Query<&Transform, With<T>>,
+) {
+    for mut camera in &mut camera {
+        let target = target.single();
+        camera.look_at(target.translation, Vec3::Y);
+    }
+}
