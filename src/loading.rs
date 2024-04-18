@@ -16,6 +16,8 @@ impl Plugin for LoadingPlugin {
                 .load_collection::<AudioAssets>()
                 .load_collection::<TextureAssets>(),
         );
+
+        // app.add_systems(Startup, load_custom_assets);
     }
 }
 
@@ -35,3 +37,11 @@ pub struct TextureAssets {
     #[asset(path = "textures/github.png")]
     pub github: Handle<Image>,
 }
+
+pub struct CustomAssets {
+    pub checker: Handle<Image>,
+}
+
+// fn load_custom_assets(mut commands: Commands, mut assets: ResMut<AssetServer>) {
+//     assets.load(path)
+// }

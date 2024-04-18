@@ -53,7 +53,7 @@ pub fn set_movement_actions(
     }
 
     if player_movement != Vec2::ZERO {
-        actions.player_movement = Some(player_movement.normalize());
+        actions.player_movement = Some(player_movement);
     } else {
         actions.player_movement = None;
     }

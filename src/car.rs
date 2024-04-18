@@ -19,19 +19,12 @@ impl Plugin for CarPlugin {
                     move_car,
                     /*rotate_car,*/ turn_front_wheels,
                     camera_look_at::<CarBody>,
+                    keep_car_awake,
                 )
                     .run_if(in_state(GameState::Playing)),
             );
     }
 }
-
-#[derive(Component)]
-struct FrontWheelMain {
-    original_rot: Quat,
-}
-
-#[derive(Component)]
-struct Wheel;
 
 #[derive(Component)]
 pub struct CarBody;
@@ -46,7 +39,7 @@ fn spawn_car(
             Car,
             SpatialBundle::from_transform(Transform::from_translation(Vec3 {
                 x: 0.0,
-                y: 0.5,
+                y: 1.5,
                 z: 0.0,
             })),
             // RigidBody::Dynamic,
@@ -55,6 +48,8 @@ fn spawn_car(
         ))
         .with_children(|car| {
             // Main body
+
+            let joint = FixedJointBuilder::new();
             let body = car
                 .spawn((
                     PbrBundle {
@@ -68,6 +63,8 @@ fn spawn_car(
                     RigidBody::Dynamic,
                     Velocity::zero(),
                     ExternalImpulse::default(),
+                    ColliderMassProperties::Density(2.0),
+                    // ImpulseJoint::new(joint),
                 ))
                 .id();
 
@@ -140,6 +137,12 @@ fn spawn_car(
         });
 }
 
+#[derive(Component)]
+struct FrontWheelMain;
+
+#[derive(Component)]
+struct Wheel;
+
 fn spawn_wheel(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -153,39 +156,44 @@ fn spawn_wheel(
     // let a = Quat::from_rotation_x(1.0) * Vec3::X;
     let joint = RevoluteJointBuilder::new(Vec3::X)
         .local_anchor2(Vec3::new(0.0, 0.0, 0.0))
-        .local_anchor1(position);
+        .local_anchor1(position)
+        .motor_max_force(200.0)
+        .motor_model(MotorModel::AccelerationBased);
 
-    car_parent
-        .spawn((
-            SpatialBundle {
-                transform: Transform::from_translation(position),
-                // .with_rotation(wheel_start_rot),
-                ..Default::default()
+    let mut builder = car_parent.spawn((
+        SpatialBundle {
+            transform: Transform::from_translation(position),
+            // .with_rotation(wheel_start_rot),
+            ..Default::default()
+        },
+        RigidBody::Dynamic,
+        Velocity::zero(),
+        ExternalImpulse::default(),
+        ImpulseJoint::new(body, joint),
+        Wheel,
+    ));
+
+    builder.with_children(|wheel| {
+        wheel.spawn((
+            PbrBundle {
+                mesh: meshes.add(Cylinder::new(0.25, 0.15)),
+                material: materials.add(Color::rgb(0.2, 0.1, 0.6)),
+                transform: Transform::from_rotation(wheel_start_rot),
+                ..default()
             },
-            Friction::new(2000.0),
-            RigidBody::Dynamic,
-            Velocity::zero(),
-            ExternalImpulse::default(),
-            ImpulseJoint::new(body, joint),
-            Wheel,
-        ))
-        .with_children(|wheel| {
-            let mut builder = wheel.spawn((
-                PbrBundle {
-                    mesh: meshes.add(Cylinder::new(0.25, 0.15)),
-                    material: materials.add(Color::rgb(0.2, 0.1, 0.6)),
-                    transform: Transform::from_rotation(wheel_start_rot),
-                    ..default()
-                },
-                Collider::round_cylinder(0.075, 0.15, 0.1),
-            ));
+            Collider::round_cylinder(0.075, 0.15, 0.1),
+            Restitution {
+                coefficient: 0.1,
+                combine_rule: CoefficientCombineRule::Average,
+            },
+            ColliderMassProperties::Density(5.0),
+            Friction::new(2.0),
+        ));
+    });
 
-            if is_front_wheel {
-                builder.insert(FrontWheelMain {
-                    original_rot: wheel_start_rot,
-                });
-            }
-        });
+    if is_front_wheel {
+        builder.insert(FrontWheelMain);
+    }
 }
 fn despawn_car() {}
 
@@ -199,41 +207,38 @@ fn move_car(
     //     return;
     // };
 
-    let move_speed = 30.0;
+    let move_speed = 2000.0;
     // if !input.y.is_zero() {
     for (mut impulse, transform, mut joint) in &mut car_query {
         joint
             .data
-            .set_motor_velocity(JointAxis::AngX, move_speed * -input.y, 0.0);
-        // let dir = transform.left();
-        // joint.data
-        // impulse.torque_impulse += input.y * *dir * move_speed * time.delta_seconds();
+            .set_motor_velocity(JointAxis::AngX, move_speed * -input.y, 1.0);
     }
-    // }
 }
 
 fn turn_front_wheels(
     time: Res<Time>,
     actions: Res<Actions>,
-    mut wheel_query: Query<(&mut Transform, &FrontWheelMain, &Parent)>,
-    mut joint_query: Query<&mut ImpulseJoint>,
+    mut joint_query: Query<&mut ImpulseJoint, With<FrontWheelMain>>,
     mut steering_wheel: Local<f32>,
 ) {
     let x_input = actions.player_movement.map(|v| v.x).unwrap_or_default();
     *steering_wheel = steering_wheel.lerp(x_input / 1.5, time.delta_seconds() * 10.0);
 
-    for (mut transform, wheel, parent) in &mut wheel_query {
-        let current_wheel_rot = wheel.original_rot * Quat::from_rotation_x(-*steering_wheel);
-        transform.rotation = current_wheel_rot;
-
-        let mut joint: Mut<'_, ImpulseJoint> = joint_query.get_mut(parent.get()).unwrap();
-        let new_joint_axis = Quat::from_rotation_y(-*steering_wheel) * Vec3::X;
-
-        joint.data.set_local_axis1(new_joint_axis);
-        joint.data.set_local_axis2(new_joint_axis);
+    for mut joint in &mut joint_query {
+        joint
+            .data
+            .set_local_basis1(Quat::from_rotation_y(-*steering_wheel));
     }
 }
 
+fn keep_car_awake(
+    mut query: Query<&mut Sleeping, Or<(With<CarBody>, With<Wheel>, With<FrontWheelMain>)>>,
+) {
+    for mut sleeping in &mut query {
+        sleeping.sleeping = false;
+    }
+}
 // fn turn_front_wheels_joint(
 //     time: Res<Time>,
 //     actions: Res<Actions>,
