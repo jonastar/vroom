@@ -151,7 +151,7 @@ fn spawn_wheel(
     let wheel_start_rot = Quat::from_rotation_z(1.5708);
 
     // let a = Quat::from_rotation_x(1.0) * Vec3::X;
-    let joint = RevoluteJointBuilder::new(Vec3::X)
+    let joint = SphericalJointBuilder::new()
         .local_anchor2(Vec3::new(0.0, 0.0, 0.0))
         .local_anchor1(position);
 
