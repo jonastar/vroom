@@ -199,7 +199,7 @@ fn move_car(
     //     return;
     // };
 
-    let move_speed = 20.0;
+    let move_speed = 30.0;
     // if !input.y.is_zero() {
     for (mut impulse, transform, mut joint) in &mut car_query {
         joint
@@ -220,7 +220,7 @@ fn turn_front_wheels(
     mut steering_wheel: Local<f32>,
 ) {
     let x_input = actions.player_movement.map(|v| v.x).unwrap_or_default();
-    *steering_wheel = steering_wheel.lerp(x_input / 2.0, time.delta_seconds() * 10.0);
+    *steering_wheel = steering_wheel.lerp(x_input / 1.5, time.delta_seconds() * 10.0);
 
     for (mut transform, wheel, parent) in &mut wheel_query {
         let current_wheel_rot = wheel.original_rot * Quat::from_rotation_x(-*steering_wheel);
