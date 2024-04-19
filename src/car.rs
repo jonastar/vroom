@@ -235,8 +235,8 @@ fn spawn_wheel(
                 coefficient: 0.1,
                 combine_rule: CoefficientCombineRule::Average,
             },
-            ColliderMassProperties::Density(25.0),
-            Friction::new(5.0),
+            ColliderMassProperties::Density(50.0),
+            Friction::new(2.0),
         ));
     });
 }
@@ -253,7 +253,7 @@ fn move_car(actions: Res<Actions>, mut car_query: Query<&mut ImpulseJoint, With<
     //     1.0 / f32::hypot(1.0, sideways_shift)
     // };
 
-    let move_speed = 400.0;
+    let move_speed = 300.0;
     for mut joint in &mut car_query {
         joint
             .data

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
+use bevy_rapier3d::{na::DMatrix, rapier::geometry::ColliderBuilder};
 
 use crate::{loading::TextureAssets, GameState};
 
@@ -227,3 +228,13 @@ pub fn camera_look_at<T: Component>(
         camera.translation = new_pos
     }
 }
+
+// fn load_ground() {
+
+//     Collider::heightfield(heights, num_rows, num_cols, scale)
+
+//     let collider = ColliderBuilder::heightfield(heights, ground_size)
+//         .translation(vector![-7.0, 0.0, 0.0])
+//         .friction(1.0);
+//     colliders.insert(collider);
+// }
