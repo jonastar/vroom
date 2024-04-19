@@ -1,6 +1,10 @@
 use crate::{actions::Actions, scene::camera_look_at, GameState};
 use bevy::{prelude::*, utils::petgraph::matrix_graph::Zero};
-use bevy_rapier3d::{na::Vector, prelude::*};
+use bevy_rapier3d::{
+    na::Vector,
+    prelude::*,
+    rapier::dynamics::{RigidBodyAdditionalMassProps, RigidBodyMassProps},
+};
 
 pub struct CarPlugin;
 
@@ -138,10 +142,15 @@ fn spawn_car(
 }
 
 #[derive(Component)]
-struct FrontWheelMain;
+struct FrontWheel;
 
 #[derive(Component)]
 struct Wheel;
+
+#[derive(Component)]
+struct WheelAxle;
+
+const MAX_STEERING_ANGLE: f32 = 0.610865;
 
 fn spawn_wheel(
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -153,12 +162,50 @@ fn spawn_wheel(
 ) {
     let wheel_start_rot = Quat::from_rotation_z(1.5708);
 
-    // let a = Quat::from_rotation_x(1.0) * Vec3::X;
-    let joint = RevoluteJointBuilder::new(Vec3::X)
-        .local_anchor2(Vec3::new(0.0, 0.0, 0.0))
-        .local_anchor1(position)
-        .motor_max_force(200.0)
-        .motor_model(MotorModel::AccelerationBased);
+    let axle_mass = bevy_rapier3d::rapier::dynamics::MassProperties::from_ball(100.0, 0.25);
+
+    let mut axle = car_parent.spawn((
+        SpatialBundle {
+            transform: Transform::from_translation(position),
+            // .with_rotation(wheel_start_rot),
+            ..Default::default()
+        },
+        RigidBody::Dynamic,
+        Velocity::zero(),
+        ExternalImpulse::default(),
+        WheelAxle,
+        AdditionalMassProperties::MassProperties(MassProperties::from_rapier(axle_mass, 1.0)),
+    ));
+
+    if is_front_wheel {
+        axle.insert(FrontWheel);
+    }
+
+    let mut axle_locked_axes =
+        JointAxesMask::X | JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Z;
+    if !is_front_wheel {
+        axle_locked_axes |= JointAxesMask::ANG_Y;
+    }
+
+    let suspension_height = 0.12;
+    // let drive_strength = 1.0;
+    // let wheel_radius = 0.28;
+
+    let mut suspension_joint = GenericJointBuilder::new(axle_locked_axes)
+        .limits(JointAxis::Y, [0.0, suspension_height])
+        .motor_position(JointAxis::Y, 0.0, 1.0e4, 1.0e3)
+        .local_anchor1(position);
+
+    if is_front_wheel {
+        suspension_joint =
+            suspension_joint.limits(JointAxis::AngY, [-MAX_STEERING_ANGLE, MAX_STEERING_ANGLE]);
+    }
+
+    axle.insert(ImpulseJoint::new(body, suspension_joint));
+    let axle_id = axle.id();
+
+    let wheel_joint = RevoluteJointBuilder::new(Vec3::X);
+    // let wheel_joint_handle = impulse_joints.insert(axle_handle, wheel_handle, wheel_joint, true);
 
     let mut builder = car_parent.spawn((
         SpatialBundle {
@@ -169,9 +216,20 @@ fn spawn_wheel(
         RigidBody::Dynamic,
         Velocity::zero(),
         ExternalImpulse::default(),
-        ImpulseJoint::new(body, joint),
+        ImpulseJoint::new(axle_id, wheel_joint),
         Wheel,
     ));
+
+    if is_front_wheel {
+        builder.insert(FrontWheel);
+    }
+
+    // let a = Quat::from_rotation_x(1.0) * Vec3::X;
+    // let joint = RevoluteJointBuilder::new(Vec3::X)
+    //     .local_anchor2(Vec3::new(0.0, 0.0, 0.0))
+    //     .local_anchor1(position)
+    //     .motor_max_force(200.0)
+    //     .motor_model(MotorModel::AccelerationBased);
 
     builder.with_children(|wheel| {
         wheel.spawn((
@@ -186,21 +244,21 @@ fn spawn_wheel(
                 coefficient: 0.1,
                 combine_rule: CoefficientCombineRule::Average,
             },
-            ColliderMassProperties::Density(5.0),
+            ColliderMassProperties::Density(50.0),
             Friction::new(2.0),
         ));
     });
 
-    if is_front_wheel {
-        builder.insert(FrontWheelMain);
-    }
+    // if is_front_wheel {
+    //     builder.insert(FrontWheelMain);
+    // }
 }
 fn despawn_car() {}
 
 fn move_car(
     time: Res<Time>,
     actions: Res<Actions>,
-    mut car_query: Query<(&mut ExternalImpulse, &Transform, &mut ImpulseJoint), With<Wheel>>,
+    mut car_query: Query<&mut ImpulseJoint, (With<Wheel>, With<FrontWheel>)>,
 ) {
     let input = actions.player_movement.unwrap_or_default();
     // let Some(input) = actions.player_movement else {
@@ -209,7 +267,7 @@ fn move_car(
 
     let move_speed = 2000.0;
     // if !input.y.is_zero() {
-    for (mut impulse, transform, mut joint) in &mut car_query {
+    for mut joint in &mut car_query {
         joint
             .data
             .set_motor_velocity(JointAxis::AngX, move_speed * -input.y, 1.0);
@@ -219,22 +277,27 @@ fn move_car(
 fn turn_front_wheels(
     time: Res<Time>,
     actions: Res<Actions>,
-    mut joint_query: Query<&mut ImpulseJoint, With<FrontWheelMain>>,
+    mut joint_query: Query<&mut ImpulseJoint, (With<WheelAxle>, With<FrontWheel>)>,
     mut steering_wheel: Local<f32>,
 ) {
     let x_input = actions.player_movement.map(|v| v.x).unwrap_or_default();
     *steering_wheel = steering_wheel.lerp(x_input / 1.5, time.delta_seconds() * 10.0);
 
     for mut joint in &mut joint_query {
-        joint
-            .data
-            .set_local_basis1(Quat::from_rotation_y(-*steering_wheel));
+        joint.data.set_motor_position(
+            JointAxis::AngY,
+            MAX_STEERING_ANGLE * -*steering_wheel,
+            1.0e4,
+            1.0e3,
+        );
+
+        // joint
+        // .data
+        // .set_local_basis1(Quat::from_rotation_y(-*steering_wheel));
     }
 }
 
-fn keep_car_awake(
-    mut query: Query<&mut Sleeping, Or<(With<CarBody>, With<Wheel>, With<FrontWheelMain>)>>,
-) {
+fn keep_car_awake(mut query: Query<&mut Sleeping, Or<(With<CarBody>, With<Wheel>)>>) {
     for mut sleeping in &mut query {
         sleeping.sleeping = false;
     }
