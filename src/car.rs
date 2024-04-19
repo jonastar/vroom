@@ -1,10 +1,6 @@
 use crate::{actions::Actions, scene::camera_look_at, GameState};
-use bevy::{prelude::*, utils::petgraph::matrix_graph::Zero};
-use bevy_rapier3d::{
-    na::Vector,
-    prelude::*,
-    rapier::dynamics::{RigidBodyAdditionalMassProps, RigidBodyMassProps},
-};
+use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 pub struct CarPlugin;
 
@@ -53,7 +49,6 @@ fn spawn_car(
         .with_children(|car| {
             // Main body
 
-            let joint = FixedJointBuilder::new();
             let body = car
                 .spawn((
                     PbrBundle {
@@ -67,8 +62,7 @@ fn spawn_car(
                     RigidBody::Dynamic,
                     Velocity::zero(),
                     ExternalImpulse::default(),
-                    ColliderMassProperties::Density(2.0),
-                    // ImpulseJoint::new(joint),
+                    ColliderMassProperties::Density(5.0),
                 ))
                 .id();
 
@@ -188,8 +182,6 @@ fn spawn_wheel(
     }
 
     let suspension_height = 0.12;
-    // let drive_strength = 1.0;
-    // let wheel_radius = 0.28;
 
     let mut suspension_joint = GenericJointBuilder::new(axle_locked_axes)
         .limits(JointAxis::Y, [0.0, suspension_height])
@@ -205,7 +197,6 @@ fn spawn_wheel(
     let axle_id = axle.id();
 
     let wheel_joint = RevoluteJointBuilder::new(Vec3::X);
-    // let wheel_joint_handle = impulse_joints.insert(axle_handle, wheel_handle, wheel_joint, true);
 
     let mut builder = car_parent.spawn((
         SpatialBundle {
@@ -244,33 +235,29 @@ fn spawn_wheel(
                 coefficient: 0.1,
                 combine_rule: CoefficientCombineRule::Average,
             },
-            ColliderMassProperties::Density(50.0),
-            Friction::new(2.0),
+            ColliderMassProperties::Density(25.0),
+            Friction::new(5.0),
         ));
     });
-
-    // if is_front_wheel {
-    //     builder.insert(FrontWheelMain);
-    // }
 }
 fn despawn_car() {}
 
-fn move_car(
-    time: Res<Time>,
-    actions: Res<Actions>,
-    mut car_query: Query<&mut ImpulseJoint, (With<Wheel>, With<FrontWheel>)>,
-) {
+fn move_car(actions: Res<Actions>, mut car_query: Query<&mut ImpulseJoint, With<Wheel>>) {
     let input = actions.player_movement.unwrap_or_default();
-    // let Some(input) = actions.player_movement else {
-    //     return;
+
+    // let differential_strength = 0.5;
+    // let sideways_shift = (MAX_STEERING_ANGLE * steering).sin() * differential_strength;
+    // let speed_diff = if sideways_shift > 0.0 {
+    //     f32::hypot(1.0, sideways_shift)
+    // } else {
+    //     1.0 / f32::hypot(1.0, sideways_shift)
     // };
 
-    let move_speed = 2000.0;
-    // if !input.y.is_zero() {
+    let move_speed = 400.0;
     for mut joint in &mut car_query {
         joint
             .data
-            .set_motor_velocity(JointAxis::AngX, move_speed * -input.y, 1.0);
+            .set_motor_velocity(JointAxis::AngX, move_speed * -input.y, 10.0);
     }
 }
 
@@ -284,16 +271,9 @@ fn turn_front_wheels(
     *steering_wheel = steering_wheel.lerp(x_input / 1.5, time.delta_seconds() * 10.0);
 
     for mut joint in &mut joint_query {
-        joint.data.set_motor_position(
-            JointAxis::AngY,
-            MAX_STEERING_ANGLE * -*steering_wheel,
-            1.0e4,
-            1.0e3,
-        );
-
-        // joint
-        // .data
-        // .set_local_basis1(Quat::from_rotation_y(-*steering_wheel));
+        joint
+            .data
+            .set_motor_position(JointAxis::AngY, MAX_STEERING_ANGLE * -x_input, 1.0e4, 1.0e3);
     }
 }
 
@@ -302,16 +282,3 @@ fn keep_car_awake(mut query: Query<&mut Sleeping, Or<(With<CarBody>, With<Wheel>
         sleeping.sleeping = false;
     }
 }
-// fn turn_front_wheels_joint(
-//     time: Res<Time>,
-//     actions: Res<Actions>,
-//     mut wheel_query: Query<&mut ImpulseJoint, With<FrontWheelParent>>,
-// ) {
-//     let x_input = actions.player_movement.map(|v| v.x).unwrap_or_default();
-
-//     for (mut joint) in &mut wheel_query {
-//         let new_joint_axis = Quat::from_rotation_y(-x_input) * Vec3::X;
-//         joint.data.set_local_axis1(new_joint_axis);
-//         joint.data.set_local_axis2(new_joint_axis);
-//     }
-// }
