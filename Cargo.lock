@@ -656,6 +656,7 @@ dependencies = [
 [[package]]
 name = "bevy_gltf_collider"
 version = "0.1.0"
+source = "git+https://github.com/jonastar/bevy_gltf_collider.git#8ad5c93694567d9a6aeb22ba4b174db01486dca5"
 dependencies = [
  "bevy",
  "bevy_rapier3d",
