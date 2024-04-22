@@ -1,5 +1,5 @@
 use crate::GameState;
-use bevy::prelude::*;
+use bevy::{gltf::Gltf, prelude::*};
 use bevy_asset_loader::prelude::*;
 use bevy_kira_audio::AudioSource;
 
@@ -36,6 +36,8 @@ pub struct TextureAssets {
     pub bevy: Handle<Image>,
     #[asset(path = "textures/github.png")]
     pub github: Handle<Image>,
+    #[asset(path = "jonastrack.glb")]
+    pub level: Handle<Gltf>,
 }
 
 pub struct CustomAssets {

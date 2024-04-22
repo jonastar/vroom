@@ -1,13 +1,14 @@
-use bevy::prelude::*;
+use std::cmp;
+
+use bevy::{gltf::Gltf, prelude::*};
 use bevy_rapier3d::prelude::*;
-use bevy_rapier3d::{na::DMatrix, rapier::geometry::ColliderBuilder};
 
 use crate::{loading::TextureAssets, GameState};
 
 pub struct ScenePlugin;
 
 #[derive(Component)]
-pub struct Scene;
+pub struct Level;
 
 /// This plugin handles player related stuff like movement
 /// Player logic is only active during the State `GameState::Playing`
@@ -24,153 +25,205 @@ struct Ground;
 fn spawn_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
+    gltf_assets: ResMut<Assets<Gltf>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     textures: Res<TextureAssets>,
+    mut scenes: ResMut<Assets<Scene>>,
 ) {
-    // plane
-    commands.spawn((
-        PbrBundle {
-            // mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
-            mesh: meshes.add(Cuboid::new(100.0, 0.5, 100.0)),
-            material: materials.add(Color::rgb(0.5, 0.2, 0.1)),
-            transform: Transform::from_translation(Vec3 {
-                x: 0.0,
-                y: -0.25,
-                z: 0.0,
+    let level = &gltf_assets.get(&textures.level).unwrap().scenes[0];
+    // dbg!(level);
+    let scene = scenes.get_mut(level).unwrap();
+    let colliders = bevy_gltf_collider::get_scene_colliders(&mut meshes, &mut scene.world).unwrap();
+
+    // for (collider, transform) in colliders {
+    //     commands.spawn((collider.clone(), TransformBundle::from_transform(transform)));
+    // }
+
+    commands
+        .spawn(SceneBundle {
+            scene: level.clone(),
+            transform: Transform::default().with_scale(Vec3 {
+                x: 2.0,
+                y: 2.0,
+                z: 2.0,
             }),
             ..default()
-        },
-        Ground,
-        Collider::cuboid(50.0, 0.25, 50.0),
-        RigidBody::Fixed,
-        Friction {
-            coefficient: 1.0,
-            combine_rule: CoefficientCombineRule::Average,
-        },
-    ));
-
-    // light
-    commands.spawn(DirectionalLightBundle {
-        transform: Transform::from_translation(Vec3 {
-            x: -1.0,
-            y: 1.0,
-            z: 0.0,
         })
-        .looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+        .with_children(|parent| {
+            for (collider, transform) in &colliders {
+                parent.spawn((
+                    collider.clone(),
+                    TransformBundle::from_transform(*transform),
+                    Friction::coefficient(1.0),
+                ));
+            }
+        });
 
-    // camera
-    // commands.spawn(Camera3dBundle {
-    //     transform: Transform::from_xyz(15.0, 5.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
+    // commands
+    //     .spawn((
+    //         RigidBody::Dynamic,
+    //         Restitution::coefficient(0.7),
+    //         Name::new(format!("rock_{}", i)),
+    //         SceneBundle {
+    //             scene: game_assets.rock_scene.clone(),
+    //             transform: Transform::from_translation(pos),
+    //             ..default()
+    //         },
+    //     ))
+    //     // Spawn colliders
+    //     .with_children(|parent| {
+    //         for (collider, transform) in game_assets.rock_colliders.iter() {
+    //             parent.spawn((
+    //                 collider.clone(),
+    //                 TransformBundle::from_transform(*transform),
+    //             ));
+    //         }
+    //     });
+
+    // // plane
+    // commands.spawn((
+    //     PbrBundle {
+    //         // mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
+    //         mesh: meshes.add(Cuboid::new(100.0, 0.5, 100.0)),
+    //         material: materials.add(Color::rgb(0.5, 0.2, 0.1)),
+    //         transform: Transform::from_translation(Vec3 {
+    //             x: 0.0,
+    //             y: -0.25,
+    //             z: 0.0,
+    //         }),
+    //         ..default()
+    //     },
+    //     Ground,
+    //     Collider::cuboid(50.0, 0.25, 50.0),
+    //     RigidBody::Fixed,
+    //     Friction {
+    //         coefficient: 1.0,
+    //         combine_rule: CoefficientCombineRule::Average,
+    //     },
+    // ));
+
+    // // light
+    // commands.spawn(DirectionalLightBundle {
+    //     transform: Transform::from_translation(Vec3 {
+    //         x: -1.0,
+    //         y: 1.0,
+    //         z: 0.0,
+    //     })
+    //     .looking_at(Vec3::ZERO, Vec3::Y),
     //     ..default()
     // });
-    spawn_box(
-        Vec3 {
-            x: 10.0,
-            y: 0.5,
-            z: 10.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
 
-    spawn_box(
-        Vec3 {
-            x: 2.0,
-            y: 0.5,
-            z: 10.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
+    // // camera
+    // // commands.spawn(Camera3dBundle {
+    // //     transform: Transform::from_xyz(15.0, 5.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
+    // //     ..default()
+    // // });
+    // spawn_box(
+    //     Vec3 {
+    //         x: 10.0,
+    //         y: 0.5,
+    //         z: 10.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
 
-    spawn_box(
-        Vec3 {
-            x: 10.0,
-            y: 0.5,
-            z: 3.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
+    // spawn_box(
+    //     Vec3 {
+    //         x: 2.0,
+    //         y: 0.5,
+    //         z: 10.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
 
-    spawn_box(
-        Vec3 {
-            x: 5.0,
-            y: 0.5,
-            z: 8.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
+    // spawn_box(
+    //     Vec3 {
+    //         x: 10.0,
+    //         y: 0.5,
+    //         z: 3.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
 
-    spawn_box(
-        Vec3 {
-            x: -5.0,
-            y: 0.5,
-            z: -8.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
+    // spawn_box(
+    //     Vec3 {
+    //         x: 5.0,
+    //         y: 0.5,
+    //         z: 8.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
 
-    spawn_box(
-        Vec3 {
-            x: -2.0,
-            y: 0.5,
-            z: -2.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
+    // spawn_box(
+    //     Vec3 {
+    //         x: -5.0,
+    //         y: 0.5,
+    //         z: -8.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
 
-    spawn_ramp(
-        Vec3 {
-            x: -3.0,
-            y: 0.0,
-            z: -3.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
-    spawn_ramp(
-        Vec3 {
-            x: -4.0,
-            y: 0.0,
-            z: -3.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
-    spawn_box(
-        Vec3 {
-            x: -3.0,
-            y: 0.0,
-            z: -4.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
-    spawn_box(
-        Vec3 {
-            x: -4.0,
-            y: 0.0,
-            z: -4.0,
-        },
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-    );
+    // spawn_box(
+    //     Vec3 {
+    //         x: -2.0,
+    //         y: 0.5,
+    //         z: -2.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
+
+    // spawn_ramp(
+    //     Vec3 {
+    //         x: -3.0,
+    //         y: 0.0,
+    //         z: -3.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
+    // spawn_ramp(
+    //     Vec3 {
+    //         x: -4.0,
+    //         y: 0.0,
+    //         z: -3.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
+    // spawn_box(
+    //     Vec3 {
+    //         x: -3.0,
+    //         y: 0.0,
+    //         z: -4.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
+    // spawn_box(
+    //     Vec3 {
+    //         x: -4.0,
+    //         y: 0.0,
+    //         z: -4.0,
+    //     },
+    //     &mut commands,
+    //     &mut meshes,
+    //     &mut materials,
+    // );
 }
 
 fn spawn_box(
@@ -215,16 +268,20 @@ fn despawn_scene() {}
 pub fn camera_look_at<T: Component>(
     time: Res<Time>,
     mut camera: Query<&mut Transform, (With<Camera>, Without<T>)>,
-    target: Query<&Transform, With<T>>,
+    target: Query<&GlobalTransform, With<T>>,
 ) {
     for mut camera in &mut camera {
         let target = target.single();
 
-        let target_pos = (target.translation + (target.back() * 15.0)) + Vec3::new(0.0, 8.0, 1.0);
+        let target_pos = (target.translation() + (target.back() * 10.0)) + Vec3::new(0.0, 5.0, 0.0);
         let new_pos = camera
             .translation
-            .lerp(target_pos, time.delta_seconds() * 5.0);
-        camera.look_at(target.translation, Vec3::Y);
+            .lerp(target_pos, time.delta_seconds() * 20.0);
+
+        let trget_rot = camera.looking_at(target.translation(), Vec3::Y).rotation;
+        // camera.look_at(target.translation(), Vec3::Y);
+        camera.rotation = camera.rotation.lerp(trget_rot, time.delta_seconds() * 20.0);
+
         camera.translation = new_pos
     }
 }
