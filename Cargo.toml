@@ -74,7 +74,8 @@ bevy_rapier3d = { version = "0.25.0", features = [
 ] }
 
 
-bevy_gltf_collider = { path = "../bevy_gltf_collider" }
+# bevy_gltf_collider = { path = "../bevy_gltf_collider" }
+bevy_gltf_collider = { git = "https://github.com/jonastar/bevy_gltf_collider.git" }
 
 [build-dependencies]
 embed-resource = "1"
