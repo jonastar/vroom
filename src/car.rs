@@ -1,4 +1,4 @@
-use crate::{actions::Actions, scene::camera_look_at, GameState};
+use crate::{actions::Actions, reset_transform::Resetable, scene::camera_look_at, GameState};
 use bevy::{
     prelude::*,
     utils::{dbg, petgraph::matrix_graph::Zero},
@@ -30,6 +30,13 @@ impl Plugin for CarPlugin {
     }
 }
 
+const MOTOR_STRENGTH: f32 = 75.0;
+const START_POSITION: Vec3 = Vec3 {
+    x: 20.0,
+    y: 1.0,
+    z: 20.0,
+};
+
 #[derive(Component)]
 pub struct CarBody;
 
@@ -41,11 +48,7 @@ fn spawn_car(
     commands
         .spawn((
             Car,
-            SpatialBundle::from_transform(Transform::from_translation(Vec3 {
-                x: 10.0,
-                y: 1.5,
-                z: 10.0,
-            })),
+            SpatialBundle::from_transform(Transform::from_translation(START_POSITION)),
             // RigidBody::Dynamic,
             // Velocity::zero(),
             // ExternalImpulse::default(),
@@ -67,6 +70,11 @@ fn spawn_car(
                     Velocity::zero(),
                     ExternalImpulse::default(),
                     ColliderMassProperties::Density(100.0),
+                    Resetable,
+                    Damping {
+                        angular_damping: 1.0,
+                        linear_damping: 0.1,
+                    },
                 ))
                 .id();
 
@@ -186,6 +194,7 @@ fn spawn_wheel(
         WheelAxle,
         AdditionalMassProperties::MassProperties(MassProperties::from_rapier(axle_mass, 1.0)),
         wheel_kind.clone(),
+        Resetable,
     ));
 
     let mut axle_locked_axes = JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Z;
@@ -206,7 +215,7 @@ fn spawn_wheel(
                 [-suspension_width, 0.0]
             },
         )
-        .motor_position(JointAxis::Y, -suspension_height, 3000.0, 1.0e2)
+        .motor_position(JointAxis::Y, -suspension_height, 3000.0, 1000.0)
         .motor_position(
             JointAxis::X,
             if wheel_kind.is_right() {
@@ -214,8 +223,8 @@ fn spawn_wheel(
             } else {
                 -suspension_width
             },
-            2000.0,
-            1.0e2,
+            10000.0,
+            1000.0,
         )
         .local_anchor1(position);
 
@@ -227,7 +236,10 @@ fn spawn_wheel(
     axle.insert(ImpulseJoint::new(body, suspension_joint));
     let axle_id = axle.id();
 
-    let wheel_joint = RevoluteJointBuilder::new(Vec3::X).motor_max_force(100.0);
+    let mut wheel_joint = RevoluteJointBuilder::new(Vec3::X)
+        .motor_max_force(MOTOR_STRENGTH)
+        .build();
+    wheel_joint.set_contacts_enabled(false);
     // .motor_model(MotorModel::ForceBased)
     // .motor_max_force(50.0);
 
@@ -242,6 +254,8 @@ fn spawn_wheel(
         ExternalImpulse::default(),
         ImpulseJoint::new(axle_id, wheel_joint),
         wheel_kind,
+        // Ccd::enabled(),
+        Resetable,
     ));
 
     // let a = Quat::from_rotation_x(1.0) * Vec3::X;
@@ -262,12 +276,14 @@ fn spawn_wheel(
             // Collider::round_cylinder(0.015, 0.15, 0.1),
             // Collider::capsule(Vec3::new(0.0, -0.0, 0.0), Vec3::new(0.0, 0.0, 0.0), 0.25),
             Collider::ball(0.25),
-            // Restitution {
-            //     coefficient: 10.0,
-            //     combine_rule: CoefficientCombineRule::Min,
-            // },
-            ColliderMassProperties::Density(50.0),
+            Restitution {
+                coefficient: 0.0,
+                combine_rule: CoefficientCombineRule::Min,
+            },
+            ColliderMassProperties::Density(10.0),
             Friction::new(2.0),
+            // Ccd::enabled(),
+            Resetable,
         ));
     });
 }
@@ -284,27 +300,32 @@ fn move_car(
     let differential_strength = 0.5;
     let sideways_shift = (MAX_STEERING_ANGLE * steering).sin() * differential_strength;
     let speed_diff = if sideways_shift > 0.0 {
-        f32::hypot(1.0, sideways_shift)
-    } else {
         1.0 / f32::hypot(1.0, sideways_shift)
+    } else {
+        f32::hypot(1.0, sideways_shift)
     };
 
-    let move_speed = 500.0;
+    dbg!(speed_diff);
+
+    let move_speed = 10000.0;
 
     for (mut joint, velocity, wheel) in &mut car_query {
-        let apply_diff = if matches!(wheel, Wheel::FrontLeft | Wheel::RearLeft) {
-            speed_diff
-        } else {
-            1.0 / speed_diff
-        };
-
+        // let apply_diff = if matches!(wheel, Wheel::FrontLeft | Wheel::RearLeft) {
+        //     speed_diff
+        // } else {
+        //     1.0 / speed_diff
+        // };
+        let apply_diff = 1.0;
         // let current_vel = velocity.angvel.length();
         // if()
-        // let target_vel = -input.y * (current_vel + 1.0);
+        // let target_vebut i think l = -input.y * (current_vel + 1.0);
 
         joint
             .data
-            .set_motor_velocity(JointAxis::AngX, -input.y * move_speed * apply_diff, 100.0);
+            .set_motor_velocity(JointAxis::AngX, -input.y * move_speed * apply_diff, 1.0);
+        joint
+            .data
+            .set_motor_max_force(JointAxis::AngX, MOTOR_STRENGTH * apply_diff);
     }
 }
 
@@ -316,7 +337,7 @@ fn turn_front_wheels(
     cat_bodies: Query<(&Transform, &Velocity), (With<CarBody>, Without<Wheel>)>,
 ) {
     let x_input = actions.player_movement.map(|v| v.x).unwrap_or_default();
-    *steering_wheel = steering_wheel.lerp(x_input / 1.5, time.delta_seconds() * 10.0);
+    *steering_wheel = steering_wheel.lerp(x_input, time.delta_seconds() * 10.0);
 
     let (body_transform, body_vel) = cat_bodies.single();
     let speed = body_vel
@@ -324,11 +345,12 @@ fn turn_front_wheels(
         .project_onto(body_transform.forward().into())
         .length();
 
-    let turn_modifier = if speed < 5.0 {
+    let turn_modifier = if speed < 7.0 {
         1.0
     } else {
-        1.0 / (speed / 5.0)
+        1.0 / (speed / 7.0)
     };
+    let turn_modifier = turn_modifier.clamp(0.1, 1.0);
 
     for (mut joint, wheel) in &mut joint_query {
         if !wheel.is_front() {
@@ -337,7 +359,7 @@ fn turn_front_wheels(
 
         joint.data.set_motor_position(
             JointAxis::AngY,
-            (MAX_STEERING_ANGLE * turn_modifier) * -x_input,
+            (MAX_STEERING_ANGLE * turn_modifier) * -*steering_wheel,
             1.0e4,
             1.0e3,
         );
@@ -365,12 +387,14 @@ fn down_force(
             continue;
         }
 
-        let angle = forward.angle_between(projected);
+        let angle = forward.angle_between(vel.linvel).to_degrees();
         if angle > 90.0 || angle < -90.0 {
-            // Going backwards
+            // Going backwards, do not apply down force
         } else {
             let down_force = projected.length() * time.delta_seconds();
-            impulse.impulse += Vec3::new(0.0, down_force * -50.0, 0.0);
+            let down_force = down_force.clamp(0.0, 0.4);
+            dbg!(down_force);
+            impulse.impulse += Vec3::new(0.0, down_force * -100.0, 0.0);
         }
     }
 }

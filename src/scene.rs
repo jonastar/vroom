@@ -30,88 +30,72 @@ fn spawn_scene(
     textures: Res<TextureAssets>,
     mut scenes: ResMut<Assets<Scene>>,
 ) {
-    let level = &gltf_assets.get(&textures.level).unwrap().scenes[0];
-    // dbg!(level);
-    let scene = scenes.get_mut(level).unwrap();
-    let colliders = bevy_gltf_collider::get_scene_colliders(&mut meshes, &mut scene.world).unwrap();
-
-    // for (collider, transform) in colliders {
-    //     commands.spawn((collider.clone(), TransformBundle::from_transform(transform)));
-    // }
-
-    commands
-        .spawn(SceneBundle {
-            scene: level.clone(),
-            transform: Transform::default().with_scale(Vec3 {
-                x: 2.0,
-                y: 2.0,
-                z: 2.0,
-            }),
-            ..default()
-        })
-        .with_children(|parent| {
-            for (collider, transform) in &colliders {
-                parent.spawn((
-                    collider.clone(),
-                    TransformBundle::from_transform(*transform),
-                    Friction::coefficient(1.0),
-                ));
-            }
-        });
-
+    // let level = &gltf_assets.get(&textures.level).unwrap().scenes[0];
+    // let scene = scenes.get_mut(level).unwrap();
+    // let colliders = bevy_gltf_collider::get_scene_colliders(&mut meshes, &mut scene.world).unwrap();
     // commands
-    //     .spawn((
-    //         RigidBody::Dynamic,
-    //         Restitution::coefficient(0.7),
-    //         Name::new(format!("rock_{}", i)),
-    //         SceneBundle {
-    //             scene: game_assets.rock_scene.clone(),
-    //             transform: Transform::from_translation(pos),
-    //             ..default()
-    //         },
-    //     ))
-    //     // Spawn colliders
+    //     .spawn(SceneBundle {
+    //         scene: level.clone(),
+    //         transform: Transform::default().with_scale(Vec3 {
+    //             x: 3.0,
+    //             y: 3.0,
+    //             z: 3.0,
+    //         }),
+    //         ..default()
+    //     })
     //     .with_children(|parent| {
-    //         for (collider, transform) in game_assets.rock_colliders.iter() {
+    //         for (collider, transform) in &colliders {
     //             parent.spawn((
     //                 collider.clone(),
     //                 TransformBundle::from_transform(*transform),
+    //                 Friction::coefficient(2.0),
     //             ));
     //         }
     //     });
 
     // // plane
-    // commands.spawn((
-    //     PbrBundle {
-    //         // mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
-    //         mesh: meshes.add(Cuboid::new(100.0, 0.5, 100.0)),
-    //         material: materials.add(Color::rgb(0.5, 0.2, 0.1)),
-    //         transform: Transform::from_translation(Vec3 {
-    //             x: 0.0,
-    //             y: -0.25,
-    //             z: 0.0,
-    //         }),
-    //         ..default()
-    //     },
-    //     Ground,
-    //     Collider::cuboid(50.0, 0.25, 50.0),
-    //     RigidBody::Fixed,
-    //     Friction {
-    //         coefficient: 1.0,
-    //         combine_rule: CoefficientCombineRule::Average,
-    //     },
-    // ));
+    commands.spawn((
+        PbrBundle {
+            // mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
+            mesh: meshes.add(Cuboid::new(100.0, 0.5, 100.0)),
+            material: materials.add(Color::rgb(0.5, 0.2, 0.1)),
+            transform: Transform::from_translation(Vec3 {
+                x: 0.0,
+                y: -0.25,
+                z: 0.0,
+            }),
+            ..default()
+        },
+        Ground,
+        Collider::cuboid(50.0, 0.25, 50.0),
+        RigidBody::Fixed,
+        Friction {
+            coefficient: 1.0,
+            combine_rule: CoefficientCombineRule::Average,
+        },
+    ));
 
     // // light
-    // commands.spawn(DirectionalLightBundle {
-    //     transform: Transform::from_translation(Vec3 {
-    //         x: -1.0,
-    //         y: 1.0,
-    //         z: 0.0,
-    //     })
-    //     .looking_at(Vec3::ZERO, Vec3::Y),
-    //     ..default()
-    // });
+    commands.spawn(DirectionalLightBundle {
+        transform: Transform::from_translation(Vec3 {
+            x: -1.0,
+            y: 1.0,
+            z: 0.0,
+        })
+        .looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
+
+    spawn_ramp(
+        Vec3 {
+            x: -3.0,
+            y: -1.0,
+            z: -3.0,
+        },
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
 
     // // camera
     // // commands.spawn(Camera3dBundle {
@@ -252,13 +236,14 @@ fn spawn_ramp(
 ) {
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+            mesh: meshes.add(Cuboid::new(5.0, 5.0, 5.0)),
             material: materials.add(Color::rgb(0.8, 0.1, 0.3)),
             transform: Transform::from_translation(position)
-                .with_rotation(Quat::from_rotation_x(45f32.to_radians())),
+                .with_rotation(Quat::from_rotation_x(30f32.to_radians())),
             ..default()
         },
-        Collider::cuboid(0.5, 0.5, 0.5),
+        Collider::cuboid(2.5, 2.5, 2.5),
+        Friction::coefficient(1.0),
         RigidBody::Fixed,
     ));
 }
@@ -273,7 +258,9 @@ pub fn camera_look_at<T: Component>(
     for mut camera in &mut camera {
         let target = target.single();
 
-        let target_pos = (target.translation() + (target.back() * 10.0)) + Vec3::new(0.0, 5.0, 0.0);
+        let mut back = target.back();
+        back.y = 0.0;
+        let target_pos = (target.translation() + (back * 10.0)) + Vec3::new(0.0, 3.0, 0.0);
         let new_pos = camera
             .translation
             .lerp(target_pos, time.delta_seconds() * 20.0);

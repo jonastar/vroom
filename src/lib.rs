@@ -6,7 +6,9 @@ mod car;
 mod loading;
 mod menu;
 mod player;
+mod reset_transform;
 mod scene;
+mod speedometer;
 
 use crate::actions::ActionsPlugin;
 use crate::audio::InternalAudioPlugin;
@@ -22,7 +24,9 @@ use bevy_rapier3d::{
     render::RapierDebugRenderPlugin,
 };
 use car::CarPlugin;
+use reset_transform::ResetPlugin;
 use scene::ScenePlugin;
+use speedometer::SpeedometerPlugin;
 
 // This example game uses States to separate logic
 // See https://bevy-cheatbook.github.io/programming/states.html
@@ -51,6 +55,8 @@ impl Plugin for GamePlugin {
             // PlayerPlugin,
             ScenePlugin,
             CarPlugin,
+            SpeedometerPlugin,
+            ResetPlugin,
         ));
 
         #[cfg(debug_assertions)]
