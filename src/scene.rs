@@ -30,50 +30,50 @@ fn spawn_scene(
     textures: Res<TextureAssets>,
     mut scenes: ResMut<Assets<Scene>>,
 ) {
-    // let level = &gltf_assets.get(&textures.level).unwrap().scenes[0];
-    // let scene = scenes.get_mut(level).unwrap();
-    // let colliders = bevy_gltf_collider::get_scene_colliders(&mut meshes, &mut scene.world).unwrap();
-    // commands
-    //     .spawn(SceneBundle {
-    //         scene: level.clone(),
-    //         transform: Transform::default().with_scale(Vec3 {
-    //             x: 3.0,
-    //             y: 3.0,
-    //             z: 3.0,
-    //         }),
-    //         ..default()
-    //     })
-    //     .with_children(|parent| {
-    //         for (collider, transform) in &colliders {
-    //             parent.spawn((
-    //                 collider.clone(),
-    //                 TransformBundle::from_transform(*transform),
-    //                 Friction::coefficient(2.0),
-    //             ));
-    //         }
-    //     });
-
-    // // plane
-    commands.spawn((
-        PbrBundle {
-            // mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
-            mesh: meshes.add(Cuboid::new(100.0, 0.5, 100.0)),
-            material: materials.add(Color::rgb(0.5, 0.2, 0.1)),
-            transform: Transform::from_translation(Vec3 {
-                x: 0.0,
-                y: -0.25,
-                z: 0.0,
+    let level = &gltf_assets.get(&textures.level).unwrap().scenes[0];
+    let scene = scenes.get_mut(level).unwrap();
+    let colliders = bevy_gltf_collider::get_scene_colliders(&mut meshes, &mut scene.world).unwrap();
+    commands
+        .spawn(SceneBundle {
+            scene: level.clone(),
+            transform: Transform::default().with_scale(Vec3 {
+                x: 3.0,
+                y: 3.0,
+                z: 3.0,
             }),
             ..default()
-        },
-        Ground,
-        Collider::cuboid(50.0, 0.25, 50.0),
-        RigidBody::Fixed,
-        Friction {
-            coefficient: 1.0,
-            combine_rule: CoefficientCombineRule::Average,
-        },
-    ));
+        })
+        .with_children(|parent| {
+            for (collider, transform) in &colliders {
+                parent.spawn((
+                    collider.clone(),
+                    TransformBundle::from_transform(*transform),
+                    Friction::coefficient(2.0),
+                ));
+            }
+        });
+
+    // // plane
+    // commands.spawn((
+    //     PbrBundle {
+    //         // mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
+    //         mesh: meshes.add(Cuboid::new(100.0, 0.5, 100.0)),
+    //         material: materials.add(Color::rgb(0.5, 0.2, 0.1)),
+    //         transform: Transform::from_translation(Vec3 {
+    //             x: 0.0,
+    //             y: -0.25,
+    //             z: 0.0,
+    //         }),
+    //         ..default()
+    //     },
+    //     Ground,
+    //     Collider::cuboid(50.0, 0.25, 50.0),
+    //     RigidBody::Fixed,
+    //     Friction {
+    //         coefficient: 1.0,
+    //         combine_rule: CoefficientCombineRule::Average,
+    //     },
+    // ));
 
     // // light
     commands.spawn(DirectionalLightBundle {
@@ -88,9 +88,9 @@ fn spawn_scene(
 
     spawn_ramp(
         Vec3 {
-            x: -3.0,
-            y: -1.0,
-            z: -3.0,
+            x: -220.0,
+            y: -16.5,
+            z: -220.0,
         },
         &mut commands,
         &mut meshes,
@@ -102,27 +102,27 @@ fn spawn_scene(
     // //     transform: Transform::from_xyz(15.0, 5.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
     // //     ..default()
     // // });
-    // spawn_box(
-    //     Vec3 {
-    //         x: 10.0,
-    //         y: 0.5,
-    //         z: 10.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
+    spawn_box(
+        Vec3 {
+            x: 10.0,
+            y: 0.5,
+            z: 10.0,
+        },
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
 
-    // spawn_box(
-    //     Vec3 {
-    //         x: 2.0,
-    //         y: 0.5,
-    //         z: 10.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
+    spawn_box(
+        Vec3 {
+            x: 2.0,
+            y: 0.5,
+            z: 10.0,
+        },
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
 
     // spawn_box(
     //     Vec3 {

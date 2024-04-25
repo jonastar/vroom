@@ -1,4 +1,10 @@
-use crate::{actions::Actions, reset_transform::Resetable, scene::camera_look_at, GameState};
+use crate::{
+    actions::Actions,
+    raycast_vehicle_controller::{DynamicRayCastVehicleController, WheelDesc},
+    reset_transform::Resetable,
+    scene::camera_look_at,
+    GameState,
+};
 use bevy::{
     prelude::*,
     utils::{dbg, petgraph::matrix_graph::Zero},
@@ -19,21 +25,30 @@ impl Plugin for CarPlugin {
             .add_systems(
                 Update,
                 (
-                    move_car,
-                    /*rotate_car,*/ turn_front_wheels,
+                    move_car_raycast,
+                    turn_front_wheels,
                     camera_look_at::<CarBody>,
-                    keep_car_awake,
-                    down_force,
                 )
                     .run_if(in_state(GameState::Playing)),
             );
+        // .add_systems(
+        //     Update,
+        //     (
+        //         move_car,
+        //         /*rotate_car,*/ turn_front_wheels,
+        //         camera_look_at::<CarBody>,
+        //         keep_car_awake,
+        //         down_force,
+        //     )
+        //         .run_if(in_state(GameState::Playing)),
+        // );
     }
 }
 
 const MOTOR_STRENGTH: f32 = 75.0;
 const START_POSITION: Vec3 = Vec3 {
     x: 20.0,
-    y: 1.0,
+    y: -3.0,
     z: 20.0,
 };
 
@@ -48,7 +63,27 @@ fn spawn_car(
     commands
         .spawn((
             Car,
-            SpatialBundle::from_transform(Transform::from_translation(START_POSITION)),
+            // SpatialBundle::from_transform(Transform::from_translation(START_POSITION)),
+            PbrBundle {
+                mesh: meshes.add(Cuboid::new(1.0, 0.5, 2.0)),
+                material: materials.add(Color::rgb(0.2, 0.1, 0.3)),
+                transform: Transform::from_translation(START_POSITION),
+                ..default()
+            },
+            CarBody,
+            Collider::cuboid(0.5, 0.25, 1.0),
+            RigidBody::Dynamic,
+            Velocity::zero(),
+            ExternalImpulse::default(),
+            ColliderMassProperties::Density(100.0),
+            Resetable,
+            DynamicRayCastVehicleController::new(),
+            Damping {
+                angular_damping: 1.0,
+                linear_damping: 0.1,
+            },
+            Sleeping::default(),
+            ReadMassProperties::default(),
             // RigidBody::Dynamic,
             // Velocity::zero(),
             // ExternalImpulse::default(),
@@ -56,27 +91,28 @@ fn spawn_car(
         .with_children(|car| {
             // Main body
 
-            let body = car
-                .spawn((
-                    PbrBundle {
-                        mesh: meshes.add(Cuboid::new(1.0, 0.5, 2.0)),
-                        material: materials.add(Color::rgb(0.2, 0.1, 0.3)),
-                        // transform: Transform::from_translation(Vec),
-                        ..default()
-                    },
-                    CarBody,
-                    Collider::cuboid(0.5, 0.25, 1.0),
-                    RigidBody::Dynamic,
-                    Velocity::zero(),
-                    ExternalImpulse::default(),
-                    ColliderMassProperties::Density(100.0),
-                    Resetable,
-                    Damping {
-                        angular_damping: 1.0,
-                        linear_damping: 0.1,
-                    },
-                ))
-                .id();
+            // let body = car
+            //     .spawn((
+            //         PbrBundle {
+            //             mesh: meshes.add(Cuboid::new(1.0, 0.5, 2.0)),
+            //             material: materials.add(Color::rgb(0.2, 0.1, 0.3)),
+            //             // transform: Transform::from_translation(Vec),
+            //             ..default()
+            //         },
+            //         CarBody,
+            //         Collider::cuboid(0.5, 0.25, 1.0),
+            //         RigidBody::Dynamic,
+            //         Velocity::zero(),
+            //         ExternalImpulse::default(),
+            //         ColliderMassProperties::Density(100.0),
+            //         Resetable,
+            //         DynamicRayCastVehicleController::new(),
+            //         Damping {
+            //             angular_damping: 1.0,
+            //             linear_damping: 0.1,
+            //         },
+            //     ))
+            //     .id();
 
             // driver
             car.spawn(PbrBundle {
@@ -95,7 +131,7 @@ fn spawn_car(
                 &mut meshes,
                 &mut materials,
                 car,
-                body,
+                car.parent_entity(),
                 Vec3 {
                     x: -0.85,
                     y: -0.15,
@@ -108,7 +144,7 @@ fn spawn_car(
                 &mut meshes,
                 &mut materials,
                 car,
-                body,
+                car.parent_entity(),
                 Vec3 {
                     x: 0.85,
                     y: -0.15,
@@ -123,7 +159,7 @@ fn spawn_car(
                 &mut meshes,
                 &mut materials,
                 car,
-                body,
+                car.parent_entity(),
                 Vec3 {
                     x: -0.85,
                     y: -0.15,
@@ -136,7 +172,7 @@ fn spawn_car(
                 &mut meshes,
                 &mut materials,
                 car,
-                body,
+                car.parent_entity(),
                 Vec3 {
                     x: 0.85,
                     y: -0.15,
@@ -168,7 +204,7 @@ impl Wheel {
 #[derive(Component)]
 struct WheelAxle;
 
-const MAX_STEERING_ANGLE: f32 = 0.610865;
+const MAX_STEERING_ANGLE: f32 = 0.410865;
 
 fn spawn_wheel(
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -178,70 +214,70 @@ fn spawn_wheel(
     position: Vec3,
     wheel_kind: Wheel,
 ) {
-    let wheel_start_rot = Quat::from_rotation_z(1.5708);
+    // let wheel_start_rot = Quat::from_rotation_z(1.5708);
 
-    let axle_mass = bevy_rapier3d::rapier::dynamics::MassProperties::from_ball(100.0, 0.25);
+    // let axle_mass = bevy_rapier3d::rapier::dynamics::MassProperties::from_ball(100.0, 0.25);
 
-    let mut axle = car_parent.spawn((
-        SpatialBundle {
-            transform: Transform::from_translation(position),
-            // .with_rotation(wheel_start_rot),
-            ..Default::default()
-        },
-        RigidBody::Dynamic,
-        Velocity::zero(),
-        ExternalImpulse::default(),
-        WheelAxle,
-        AdditionalMassProperties::MassProperties(MassProperties::from_rapier(axle_mass, 1.0)),
-        wheel_kind.clone(),
-        Resetable,
-    ));
+    // let mut axle = car_parent.spawn((
+    //     SpatialBundle {
+    //         transform: Transform::from_translation(position),
+    //         // .with_rotation(wheel_start_rot),
+    //         ..Default::default()
+    //     },
+    //     RigidBody::Dynamic,
+    //     Velocity::zero(),
+    //     ExternalImpulse::default(),
+    //     WheelAxle,
+    //     AdditionalMassProperties::MassProperties(MassProperties::from_rapier(axle_mass, 1.0)),
+    //     wheel_kind.clone(),
+    //     Resetable,
+    // ));
 
-    let mut axle_locked_axes = JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Z;
-    if !wheel_kind.is_front() {
-        axle_locked_axes |= JointAxesMask::ANG_Y;
-    }
+    // let mut axle_locked_axes = JointAxesMask::Z | JointAxesMask::ANG_X | JointAxesMask::ANG_Z;
+    // if !wheel_kind.is_front() {
+    //     axle_locked_axes |= JointAxesMask::ANG_Y;
+    // }
 
-    let suspension_height = 0.22;
-    let suspension_width = 0.15;
+    // let suspension_height = 0.22;
+    // let suspension_width = 0.15;
 
-    let mut suspension_joint = GenericJointBuilder::new(axle_locked_axes)
-        .limits(JointAxis::Y, [-suspension_height, 0.0])
-        .limits(
-            JointAxis::X,
-            if wheel_kind.is_right() {
-                [0.0, suspension_width]
-            } else {
-                [-suspension_width, 0.0]
-            },
-        )
-        .motor_position(JointAxis::Y, -suspension_height, 3000.0, 1000.0)
-        .motor_position(
-            JointAxis::X,
-            if wheel_kind.is_right() {
-                suspension_width
-            } else {
-                -suspension_width
-            },
-            10000.0,
-            1000.0,
-        )
-        .local_anchor1(position);
+    // let mut suspension_joint = GenericJointBuilder::new(axle_locked_axes)
+    //     .limits(JointAxis::Y, [-suspension_height, 0.0])
+    //     .limits(
+    //         JointAxis::X,
+    //         if wheel_kind.is_right() {
+    //             [0.0, suspension_width]
+    //         } else {
+    //             [-suspension_width, 0.0]
+    //         },
+    //     )
+    //     .motor_position(JointAxis::Y, -suspension_height, 3000.0, 1000.0)
+    //     .motor_position(
+    //         JointAxis::X,
+    //         if wheel_kind.is_right() {
+    //             suspension_width
+    //         } else {
+    //             -suspension_width
+    //         },
+    //         10000.0,
+    //         1000.0,
+    //     )
+    //     .local_anchor1(position);
 
-    if wheel_kind.is_front() {
-        suspension_joint =
-            suspension_joint.limits(JointAxis::AngY, [-MAX_STEERING_ANGLE, MAX_STEERING_ANGLE]);
-    }
+    // if wheel_kind.is_front() {
+    //     suspension_joint =
+    //         suspension_joint.limits(JointAxis::AngY, [-MAX_STEERING_ANGLE, MAX_STEERING_ANGLE]);
+    // }
 
-    axle.insert(ImpulseJoint::new(body, suspension_joint));
-    let axle_id = axle.id();
+    // axle.insert(ImpulseJoint::new(body, suspension_joint));
+    // let axle_id = axle.id();
 
-    let mut wheel_joint = RevoluteJointBuilder::new(Vec3::X)
-        .motor_max_force(MOTOR_STRENGTH)
-        .build();
-    wheel_joint.set_contacts_enabled(false);
-    // .motor_model(MotorModel::ForceBased)
-    // .motor_max_force(50.0);
+    // let mut wheel_joint = RevoluteJointBuilder::new(Vec3::X)
+    //     .motor_max_force(MOTOR_STRENGTH)
+    //     .build();
+    // wheel_joint.set_contacts_enabled(false);
+    // // .motor_model(MotorModel::ForceBased)
+    // // .motor_max_force(50.0);
 
     let mut builder = car_parent.spawn((
         SpatialBundle {
@@ -249,13 +285,25 @@ fn spawn_wheel(
             // .with_rotation(wheel_start_rot),
             ..Default::default()
         },
-        RigidBody::Dynamic,
-        Velocity::zero(),
-        ExternalImpulse::default(),
-        ImpulseJoint::new(axle_id, wheel_joint),
         wheel_kind,
         // Ccd::enabled(),
         Resetable,
+        crate::raycast_vehicle_controller::Wheel::new(WheelDesc {
+            chassis_connection_cs: position,
+            direction_cs: -Vec3::Y,
+            axle_cs: Vec3::X,
+            suspension_rest_length: 0.25,
+            radius: 0.25,
+
+            suspension_stiffness: 20.0,
+            damping_compression: 10.0,
+            damping_relaxation: 10.0,
+            max_suspension_travel: 1.0,
+            side_friction_stiffness: 1.0,
+            friction_slip: 10.5,
+            max_suspension_force: 6000.0,
+        }),
+        // Collider::ball(0.25),
     ));
 
     // let a = Quat::from_rotation_x(1.0) * Vec3::X;
@@ -265,27 +313,27 @@ fn spawn_wheel(
     //     .motor_max_force(200.0)
     //     .motor_model(MotorModel::AccelerationBased);
 
-    builder.with_children(|wheel| {
-        wheel.spawn((
-            PbrBundle {
-                mesh: meshes.add(Cylinder::new(0.25, 0.15)),
-                material: materials.add(Color::rgb(0.2, 0.1, 0.6)),
-                transform: Transform::from_rotation(wheel_start_rot),
-                ..default()
-            },
-            // Collider::round_cylinder(0.015, 0.15, 0.1),
-            // Collider::capsule(Vec3::new(0.0, -0.0, 0.0), Vec3::new(0.0, 0.0, 0.0), 0.25),
-            Collider::ball(0.25),
-            Restitution {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Min,
-            },
-            ColliderMassProperties::Density(10.0),
-            Friction::new(2.0),
-            // Ccd::enabled(),
-            Resetable,
-        ));
-    });
+    // builder.with_children(|wheel| {
+    //     wheel.spawn((
+    //         PbrBundle {
+    //             mesh: meshes.add(Cylinder::new(0.25, 0.15)),
+    //             material: materials.add(Color::rgb(0.2, 0.1, 0.6)),
+    //             transform: Transform::from_rotation(wheel_start_rot),
+    //             ..default()
+    //         },
+    //         // Collider::round_cylinder(0.015, 0.15, 0.1),
+    //         // Collider::capsule(Vec3::new(0.0, -0.0, 0.0), Vec3::new(0.0, 0.0, 0.0), 0.25),
+    //         Collider::ball(0.25),
+    //         Restitution {
+    //             coefficient: 0.0,
+    //             combine_rule: CoefficientCombineRule::Min,
+    //         },
+    //         ColliderMassProperties::Density(10.0),
+    //         Friction::new(2.0),
+    //         // Ccd::enabled(),
+    //         Resetable,
+    //     ));
+    // });
 }
 fn despawn_car() {}
 
@@ -329,12 +377,82 @@ fn move_car(
     }
 }
 
+fn move_car_raycast(
+    actions: Res<Actions>,
+    // time: Res<Time>,
+    mut car_query: Query<(&mut crate::raycast_vehicle_controller::Wheel, &Wheel)>,
+) {
+    let input = actions.player_movement.unwrap_or_default();
+
+    // fn update_vehicle_controller(&mut self, events: &ButtonInput<KeyCode>) {
+    //     if self.state.running == RunMode::Stop {
+    //         return;
+    //     }
+
+    //     if let Some(vehicle) = &mut self.state.vehicle_controller {
+    //         let mut engine_force = 0.0;
+    //         let mut steering_angle = 0.0;
+
+    //         for key in events.get_pressed() {
+    //             match *key {
+    //                 KeyCode::ArrowRight => {
+    //                     steering_angle += -0.7;
+    //                 }
+    //                 KeyCode::ArrowLeft => {
+    //                     steering_angle += 0.7;
+    //                 }
+    //                 KeyCode::ArrowUp => {
+    //                     engine_force += 30.0;
+    //                 }
+    //                 KeyCode::ArrowDown => {
+    //                     engine_force += -30.0;
+    //                 }
+    //                 _ => {}
+    //             }
+    //         }
+
+    //         let wheels = vehicle.wheels_mut();
+    //         wheels[0].engine_force = engine_force;
+    //         wheels[0].steering = steering_angle;
+    //         wheels[1].engine_force = engine_force;
+    //         wheels[1].steering = steering_angle;
+
+    //         vehicle.update_vehicle(
+    //             self.harness.physics.integration_parameters.dt,
+    //             &mut self.harness.physics.bodies,
+    //             &self.harness.physics.colliders,
+    //             &self.harness.physics.query_pipeline,
+    //             QueryFilter::exclude_dynamic().exclude_rigid_body(vehicle.chassis),
+    //         );
+    //     }
+    // }
+
+    for (mut wheel, our_wheel) in &mut car_query {
+        if !our_wheel.is_front() {
+            continue;
+        }
+
+        let engine_force = input.y * 700.0;
+        // let steering = (input.x * MAX_STEERING_ANGLE) + (180.0f32).to_radians();
+        // let target_steering = -input.x * MAX_STEERING_ANGLE;
+        // let steering = wheel
+        //     .steering
+        //     .lerp(target_steering, time.delta_seconds() * 10.0);
+        // let steering = -input.x * MAX_STEERING_ANGLE;
+
+        wheel.engine_force = engine_force;
+        // wheel.steering = steering;
+    }
+}
+
 fn turn_front_wheels(
     time: Res<Time>,
     actions: Res<Actions>,
-    mut joint_query: Query<(&mut ImpulseJoint, &Wheel), With<WheelAxle>>,
+    // mut joint_query: Query<(&mut ImpulseJoint, &Wheel), With<WheelAxle>>,
     mut steering_wheel: Local<f32>,
     cat_bodies: Query<(&Transform, &Velocity), (With<CarBody>, Without<Wheel>)>,
+
+    mut car_query: Query<(&mut crate::raycast_vehicle_controller::Wheel, &Wheel)>,
 ) {
     let x_input = actions.player_movement.map(|v| v.x).unwrap_or_default();
     *steering_wheel = steering_wheel.lerp(x_input, time.delta_seconds() * 10.0);
@@ -352,17 +470,32 @@ fn turn_front_wheels(
     };
     let turn_modifier = turn_modifier.clamp(0.1, 1.0);
 
-    for (mut joint, wheel) in &mut joint_query {
-        if !wheel.is_front() {
+    // for (mut joint, wheel) in &mut joint_query {
+    //     if !wheel.is_front() {
+    //         continue;
+    //     }
+
+    //     joint.data.set_motor_position(
+    //         JointAxis::AngY,
+    //         (MAX_STEERING_ANGLE * turn_modifier) * -*steering_wheel,
+    //         1.0e4,
+    //         1.0e3,
+    //     );
+    // }
+
+    for (mut wheel, our_wheel) in &mut car_query {
+        if !our_wheel.is_front() {
             continue;
         }
 
-        joint.data.set_motor_position(
-            JointAxis::AngY,
-            (MAX_STEERING_ANGLE * turn_modifier) * -*steering_wheel,
-            1.0e4,
-            1.0e3,
-        );
+        // let steering = (input.x * MAX_STEERING_ANGLE) + (180.0f32).to_radians();
+        // let target_steering = -input.x * MAX_STEERING_ANGLE;
+        // let steering = wheel
+        //     .steering
+        //     .lerp(target_steering, time.delta_seconds() * 10.0);
+        // let steering = -input.x * MAX_STEERING_ANGLE;
+
+        wheel.steering = (MAX_STEERING_ANGLE * turn_modifier) * -*steering_wheel;
     }
 }
 

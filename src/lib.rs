@@ -6,6 +6,7 @@ mod car;
 mod loading;
 mod menu;
 mod player;
+mod raycast_vehicle_controller;
 mod reset_transform;
 mod scene;
 mod speedometer;
@@ -24,6 +25,7 @@ use bevy_rapier3d::{
     render::RapierDebugRenderPlugin,
 };
 use car::CarPlugin;
+use raycast_vehicle_controller::RaycastVehiclePlugin;
 use reset_transform::ResetPlugin;
 use scene::ScenePlugin;
 use speedometer::SpeedometerPlugin;
@@ -57,6 +59,7 @@ impl Plugin for GamePlugin {
             CarPlugin,
             SpeedometerPlugin,
             ResetPlugin,
+            RaycastVehiclePlugin,
         ));
 
         #[cfg(debug_assertions)]
