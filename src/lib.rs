@@ -21,7 +21,7 @@ use bevy::app::App;
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_rapier3d::{
-    plugin::{NoUserData, RapierPhysicsPlugin},
+    plugin::{NoUserData, RapierConfiguration, RapierPhysicsPlugin, TimestepMode},
     render::RapierDebugRenderPlugin,
 };
 use car::CarPlugin;
@@ -47,20 +47,28 @@ enum GameState {
 pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.init_state::<GameState>().add_plugins((
-            RapierPhysicsPlugin::<NoUserData>::default(),
-            RapierDebugRenderPlugin::default(),
-            LoadingPlugin,
-            MenuPlugin,
-            ActionsPlugin,
-            InternalAudioPlugin,
-            // PlayerPlugin,
-            ScenePlugin,
-            CarPlugin,
-            SpeedometerPlugin,
-            ResetPlugin,
-            RaycastVehiclePlugin,
-        ));
+        let mut physics_config = RapierConfiguration::default();
+        physics_config.timestep_mode = TimestepMode::Fixed {
+            dt: 1.0 / 64.0,
+            substeps: 1,
+        };
+
+        app.init_state::<GameState>()
+            .insert_resource(physics_config)
+            .add_plugins((
+                RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule(),
+                RapierDebugRenderPlugin::default(),
+                LoadingPlugin,
+                MenuPlugin,
+                ActionsPlugin,
+                InternalAudioPlugin,
+                // PlayerPlugin,
+                ScenePlugin,
+                CarPlugin,
+                SpeedometerPlugin,
+                ResetPlugin,
+                RaycastVehiclePlugin,
+            ));
 
         #[cfg(debug_assertions)]
         {

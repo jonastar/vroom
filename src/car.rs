@@ -23,7 +23,7 @@ impl Plugin for CarPlugin {
         app.add_systems(OnEnter(GameState::Playing), spawn_car)
             .add_systems(OnExit(GameState::Playing), despawn_car)
             .add_systems(
-                Update,
+                FixedUpdate,
                 (
                     move_car_raycast,
                     turn_front_wheels,
@@ -84,6 +84,7 @@ fn spawn_car(
             },
             Sleeping::default(),
             ReadMassProperties::default(),
+            TransformInterpolation::default(),
             // RigidBody::Dynamic,
             // Velocity::zero(),
             // ExternalImpulse::default(),
@@ -296,8 +297,8 @@ fn spawn_wheel(
             radius: 0.25,
 
             suspension_stiffness: 20.0,
-            damping_compression: 10.0,
-            damping_relaxation: 10.0,
+            damping_compression: 1.0,
+            damping_relaxation: 1.0,
             max_suspension_travel: 1.0,
             side_friction_stiffness: 1.0,
             friction_slip: 10.5,

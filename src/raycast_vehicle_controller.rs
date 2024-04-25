@@ -16,7 +16,7 @@ pub struct RaycastVehiclePlugin;
 
 impl Plugin for RaycastVehiclePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (update_vehicles, debug_wheels).chain());
+        app.add_systems(FixedUpdate, (update_vehicles, debug_wheels).chain());
     }
 }
 
