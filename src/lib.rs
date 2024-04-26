@@ -20,6 +20,7 @@ use bevy::app::App;
 #[cfg(debug_assertions)]
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
+use bevy_editor_pls::EditorPlugin;
 use bevy_rapier3d::{
     plugin::{NoUserData, RapierConfiguration, RapierPhysicsPlugin, TimestepMode},
     render::RapierDebugRenderPlugin,
@@ -68,6 +69,7 @@ impl Plugin for GamePlugin {
                 SpeedometerPlugin,
                 ResetPlugin,
                 RaycastVehiclePlugin,
+                // EditorPlugin::default(),
             ));
 
         #[cfg(debug_assertions)]

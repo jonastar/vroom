@@ -25,6 +25,7 @@ impl Plugin for ActionsPlugin {
 #[derive(Default, Resource)]
 pub struct Actions {
     pub player_movement: Option<Vec2>,
+    pub breaking: bool,
     pub reset: bool,
 }
 
@@ -60,4 +61,5 @@ pub fn set_movement_actions(
     }
 
     actions.reset = keyboard_input.just_pressed(KeyCode::KeyR);
+    actions.breaking = keyboard_input.pressed(KeyCode::Space);
 }

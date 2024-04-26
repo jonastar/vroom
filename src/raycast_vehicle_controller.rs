@@ -16,14 +16,21 @@ pub struct RaycastVehiclePlugin;
 
 impl Plugin for RaycastVehiclePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(FixedUpdate, (update_vehicles, debug_wheels).chain());
+        app.register_type::<DynamicRayCastVehicleController>()
+            .register_type::<Wheel>()
+            .register_type::<WheelTuning>()
+            .add_systems(
+                FixedUpdate,
+                (update_vehicles, update_wheel_visuals, debug_wheels).chain(),
+            );
     }
 }
 
 type Point = Vec3;
 
 /// A character controller to simulate vehicles using ray-casting for the wheels.
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 pub struct DynamicRayCastVehicleController {
     // wheels: Vec<Wheel>,
     // forward_ws: Vec<Vec3>,
@@ -37,7 +44,7 @@ pub struct DynamicRayCastVehicleController {
     pub index_forward_axis: usize,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Reflect)]
 /// Parameters affecting the physical behavior of a wheel.
 pub struct WheelTuning {
     /// The suspension stiffness.
@@ -78,7 +85,7 @@ impl Default for WheelTuning {
 }
 
 /// Objects used to initialize a wheel.
-#[derive(Component)]
+#[derive(Reflect)]
 pub struct WheelDesc {
     /// The position of the wheel, relative to the chassis.
     pub chassis_connection_cs: Point,
@@ -116,9 +123,36 @@ pub struct WheelDesc {
     pub side_friction_stiffness: Real,
 }
 
+impl WheelDesc {
+    pub fn new(
+        chassis_connection_cs: Point,
+        direction_cs: Vec3,
+        axle_cs: Vec3,
+        suspension_rest_length: Real,
+        radius: Real,
+        tuning: &WheelTuning,
+    ) -> Self {
+        WheelDesc {
+            chassis_connection_cs,
+            direction_cs,
+            axle_cs,
+            suspension_rest_length,
+            radius,
+            suspension_stiffness: tuning.suspension_stiffness,
+            damping_compression: tuning.suspension_compression,
+            damping_relaxation: tuning.suspension_damping,
+            friction_slip: tuning.friction_slip,
+            max_suspension_travel: tuning.max_suspension_travel,
+            max_suspension_force: tuning.max_suspension_force,
+            side_friction_stiffness: tuning.side_friction_stiffness,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 /// A wheel attached to a vehicle.
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 pub struct Wheel {
     raycast_info: RayCastInfo,
 
@@ -222,6 +256,16 @@ impl Wheel {
         }
     }
 
+    pub fn apply_tuning(&mut self, info: &WheelTuning) {
+        self.suspension_stiffness = info.suspension_stiffness;
+        self.damping_compression = info.suspension_compression;
+        self.damping_relaxation = info.suspension_damping;
+        self.friction_slip = info.friction_slip;
+        self.max_suspension_travel = info.max_suspension_travel;
+        self.max_suspension_force = info.max_suspension_force;
+        self.side_friction_stiffness = info.side_friction_stiffness;
+    }
+
     /// Information about suspension and the ground obtained from the ray-casting
     /// for this wheel.
     pub fn raycast_info(&self) -> &RayCastInfo {
@@ -246,7 +290,7 @@ impl Wheel {
 
 /// Information about suspension and the ground obtained from the ray-casting
 /// to simulate a wheel’s suspension.
-#[derive(Copy, Clone, Debug, PartialEq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Default, Reflect)]
 pub struct RayCastInfo {
     /// The (world-space) contact normal between the wheel and the floor.
     pub contact_normal_ws: Vec3,
@@ -345,7 +389,8 @@ impl DynamicRayCastVehicleController {
         chassis_center_of_mass_world: Vec3,
     ) {
         // let wheel = &mut self.wheels[wheel_id];
-        let raylen = wheel.suspension_rest_length + wheel.radius;
+        // wheel.suspension_rest_length + wheel.max_suspension_travel
+        let raylen = wheel.suspension_rest_length + wheel.max_suspension_travel + wheel.radius;
         let rayvector = wheel.wheel_direction_ws * raylen;
         let source = wheel.raycast_info.hard_point_ws;
         wheel.raycast_info.contact_point_ws = source + rayvector;
@@ -357,6 +402,7 @@ impl DynamicRayCastVehicleController {
 
         if let Some((entity_hit, mut hit)) = hit {
             if hit.toi == 0.0 {
+                dbg!("zero toi");
                 // let collider = &colliders[collider_hit];
                 // hit.
                 let (collider, coll_trans) = colliders.get(entity_hit).unwrap();
@@ -398,6 +444,7 @@ impl DynamicRayCastVehicleController {
                 .raycast_info
                 .suspension_length
                 .clamp(min_suspension_length, max_suspension_length);
+            dbg!(wheel.raycast_info.suspension_length);
             // wheel.raycast_info.contact_point_ws = ray.point_at(hit.toi);
             wheel.raycast_info.contact_point_ws = hit.point;
 
@@ -541,8 +588,9 @@ impl DynamicRayCastVehicleController {
                 let length_diff = rest_length - current_length;
 
                 force = wheel.suspension_stiffness
-                    * length_diff
+                    * (length_diff * 2.0)
                     * wheel.clipped_inv_contact_dot_suspension;
+                dbg!(length_diff, wheel.clipped_inv_contact_dot_suspension, force);
             }
 
             // Damper
@@ -555,6 +603,7 @@ impl DynamicRayCastVehicleController {
                         wheel.damping_relaxation
                     };
                     force -= susp_damping * projected_rel_vel;
+                    dbg!(projected_rel_vel, susp_damping);
                 }
             }
 
@@ -1152,6 +1201,7 @@ pub fn update_vehicles(
             // apply suspension force
             let mut suspension_force = wheel.wheel_suspension_force;
 
+            dbg!(suspension_force);
             if suspension_force > wheel.max_suspension_force {
                 suspension_force = wheel.max_suspension_force;
             }
@@ -1327,5 +1377,14 @@ fn debug_wheels(wheels: Query<&Wheel>, mut gizmos: Gizmos) {
             wheel.center + (wheel.side_impulse * wheel.axle),
             Color::ORANGE,
         );
+    }
+}
+
+fn update_wheel_visuals(mut wheels: Query<(&Wheel, &mut Transform)>) {
+    for (wheel, mut transform) in &mut wheels {
+        transform.rotation = Quat::from_rotation_y(wheel.steering);
+
+        transform.translation.y =
+            -wheel.raycast_info.suspension_length + wheel.chassis_connection_point_cs.y;
     }
 }
