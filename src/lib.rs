@@ -11,6 +11,8 @@ mod reset_transform;
 mod scene;
 mod speedometer;
 
+use std::time::Duration;
+
 use crate::actions::ActionsPlugin;
 use crate::audio::InternalAudioPlugin;
 use crate::loading::LoadingPlugin;
@@ -50,11 +52,14 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         let mut physics_config = RapierConfiguration::default();
         physics_config.timestep_mode = TimestepMode::Fixed {
-            dt: 1.0 / 64.0,
+            dt: 1.0 / 60.0,
             substeps: 1,
         };
 
         app.init_state::<GameState>()
+            .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f32(
+                1.0 / 60.0,
+            )))
             .insert_resource(physics_config)
             .add_plugins((
                 RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule(),
