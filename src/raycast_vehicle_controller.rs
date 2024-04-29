@@ -8,7 +8,7 @@ use bevy_rapier3d::geometry::{Collider, RapierColliderHandle};
 use bevy_rapier3d::na::Vector3;
 use bevy_rapier3d::parry::math::Isometry;
 use bevy_rapier3d::pipeline::QueryFilter;
-use bevy_rapier3d::plugin::RapierContext;
+use bevy_rapier3d::plugin::{PhysicsSet, RapierContext};
 use bevy_rapier3d::rapier::dynamics::{RigidBody, RigidBodyHandle};
 use bevy_rapier3d::rapier::math::Real;
 
@@ -21,7 +21,9 @@ impl Plugin for RaycastVehiclePlugin {
             .register_type::<WheelTuning>()
             .add_systems(
                 FixedUpdate,
-                (update_vehicles, update_wheel_visuals, debug_wheels).chain(),
+                (update_vehicles, update_wheel_visuals, debug_wheels)
+                    .chain()
+                    .after(PhysicsSet::Writeback),
             );
     }
 }
@@ -402,7 +404,6 @@ impl DynamicRayCastVehicleController {
 
         if let Some((entity_hit, mut hit)) = hit {
             if hit.toi == 0.0 {
-                dbg!("zero toi");
                 // let collider = &colliders[collider_hit];
                 // hit.
                 let (collider, coll_trans) = colliders.get(entity_hit).unwrap();
@@ -444,7 +445,6 @@ impl DynamicRayCastVehicleController {
                 .raycast_info
                 .suspension_length
                 .clamp(min_suspension_length, max_suspension_length);
-            dbg!(wheel.raycast_info.suspension_length);
             // wheel.raycast_info.contact_point_ws = ray.point_at(hit.toi);
             wheel.raycast_info.contact_point_ws = hit.point;
 
@@ -590,7 +590,6 @@ impl DynamicRayCastVehicleController {
                 force = wheel.suspension_stiffness
                     * (length_diff * 2.0)
                     * wheel.clipped_inv_contact_dot_suspension;
-                dbg!(length_diff, wheel.clipped_inv_contact_dot_suspension, force);
             }
 
             // Damper
@@ -603,7 +602,6 @@ impl DynamicRayCastVehicleController {
                         wheel.damping_relaxation
                     };
                     force -= susp_damping * projected_rel_vel;
-                    dbg!(projected_rel_vel, susp_damping);
                 }
             }
 
@@ -882,8 +880,8 @@ impl DynamicRayCastVehicleController {
         }
 
         let side_factor = 1.0;
-        let fwd_factor = 0.5;
-        // let mut factors = Vec::new();
+        let fwd_factor = 0.0;
+        let mut factors = Vec::new();
 
         let mut sliding = false;
         {
@@ -927,7 +925,8 @@ impl DynamicRayCastVehicleController {
                 wheel.skid_info = 1.0;
 
                 if ground_object.is_some() {
-                    let max_imp = wheel.wheel_suspension_force * dt * wheel.friction_slip;
+                    // let max_imp = wheel.wheel_suspension_force * dt * wheel.friction_slip;
+                    let max_imp = 500.0 * dt * wheel.friction_slip;
                     let max_imp_side = max_imp;
                     let max_imp_squared = max_imp * max_imp_side;
                     assert!(max_imp_squared >= 0.0);
@@ -938,33 +937,39 @@ impl DynamicRayCastVehicleController {
                     let y = wheel.side_impulse * side_factor;
 
                     let impulse_squared = x * x + y * y;
+                    dbg!(
+                        impulse_squared,
+                        max_imp_squared,
+                        wheel.wheel_suspension_force
+                    );
 
                     // TODO: this seems unreliable!
-                    // if impulse_squared > max_imp_squared {
-                    //     sliding = true;
+                    if impulse_squared > max_imp_squared {
+                        sliding = true;
 
-                    //     let factor = max_imp * inv(impulse_squared.sqrt());
-                    //     // factors.push(factor);
-                    //     wheel.skid_info *= factor;
-                    // } else {
-                    //     dbg!("Not higher!");
-                    // }
+                        let factor = max_imp * inv(impulse_squared.sqrt());
+                        factors.push(factor);
+                        wheel.skid_info *= factor;
+                    } else {
+                        dbg!("Not higher!");
+                    }
                 }
             }
         }
-        // dbg!(&factors);
+        dbg!(&factors);
 
-        // if sliding {
-        //     for wheel_e in &wheel_entities {
-        //         let mut wheel = wheels.get_mut(*wheel_e).unwrap();
-        //         if wheel.side_impulse != 0.0 {
-        //             if wheel.skid_info < 1.0 {
-        //                 wheel.forward_impulse *= wheel.skid_info;
-        //                 wheel.side_impulse *= wheel.skid_info;
-        //             }
-        //         }
-        //     }
-        // }
+        if sliding {
+            for wheel_e in &wheel_entities {
+                let mut wheel = wheels.get_mut(*wheel_e).unwrap();
+                if wheel.side_impulse != 0.0 {
+                    if wheel.skid_info < 1.0 {
+                        // wheel.forward_impulse *= wheel.skid_info;
+                        let delta = wheel.side_impulse - (wheel.side_impulse * wheel.skid_info);
+                        wheel.side_impulse -= delta / 1.2;
+                    }
+                }
+            }
+        }
 
         // apply the impulses
         {
@@ -1201,7 +1206,6 @@ pub fn update_vehicles(
             // apply suspension force
             let mut suspension_force = wheel.wheel_suspension_force;
 
-            dbg!(suspension_force);
             if suspension_force > wheel.max_suspension_force {
                 suspension_force = wheel.max_suspension_force;
             }
@@ -1380,11 +1384,15 @@ fn debug_wheels(wheels: Query<&Wheel>, mut gizmos: Gizmos) {
     }
 }
 
-fn update_wheel_visuals(mut wheels: Query<(&Wheel, &mut Transform)>) {
+fn update_wheel_visuals(time: Res<Time>, mut wheels: Query<(&Wheel, &mut Transform)>) {
     for (wheel, mut transform) in &mut wheels {
         transform.rotation = Quat::from_rotation_y(wheel.steering);
 
-        transform.translation.y =
-            -wheel.raycast_info.suspension_length + wheel.chassis_connection_point_cs.y;
+        let new_pos = transform.translation.y.lerp(
+            -wheel.raycast_info.suspension_length + wheel.chassis_connection_point_cs.y,
+            time.delta_seconds() * 10.0,
+        );
+
+        transform.translation.y = new_pos;
     }
 }

@@ -239,6 +239,22 @@ fn spawn_wheel(
     wheel_kind: Wheel,
     tuning: WheelTuning,
 ) {
+    car_parent.spawn((
+        SpatialBundle {
+            transform: Transform::from_translation(
+                position
+                    + Vec3 {
+                        x: 0.0,
+                        y: -0.1,
+                        z: 0.0,
+                    },
+            ),
+            // .with_rotation(wheel_start_rot),
+            ..Default::default()
+        },
+        Collider::cuboid(0.1, 0.15, 0.1),
+    ));
+
     let mut builder = car_parent.spawn((
         SpatialBundle {
             transform: Transform::from_translation(position),
@@ -285,6 +301,12 @@ fn move_car_raycast(
     let input = actions.player_movement.unwrap_or_default();
 
     for (mut wheel, our_wheel) in &mut car_query {
+        if actions.breaking {
+            wheel.brake = 10.0;
+        } else {
+            wheel.brake = 0.0;
+        }
+
         if !our_wheel.is_front() {
             continue;
         }
@@ -292,11 +314,6 @@ fn move_car_raycast(
         let engine_force = input.y * 700.0;
 
         wheel.engine_force = engine_force;
-        if actions.breaking {
-            wheel.brake = 10.0;
-        } else {
-            wheel.brake = 0.0;
-        }
     }
 }
 

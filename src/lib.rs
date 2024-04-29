@@ -3,6 +3,7 @@
 mod actions;
 mod audio;
 mod car;
+mod editor;
 mod loading;
 mod menu;
 mod player;
@@ -22,6 +23,7 @@ use bevy::app::App;
 #[cfg(debug_assertions)]
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
+use bevy_editor_cam::DefaultEditorCamPlugins;
 use bevy_editor_pls::EditorPlugin;
 use bevy_rapier3d::{
     plugin::{NoUserData, RapierConfiguration, RapierPhysicsPlugin, TimestepMode},
@@ -32,6 +34,7 @@ use raycast_vehicle_controller::RaycastVehiclePlugin;
 use reset_transform::ResetPlugin;
 use scene::ScenePlugin;
 use speedometer::SpeedometerPlugin;
+use transform_gizmo_bevy::{EnumSet, GizmoMode, GizmoOptions, TransformGizmoPlugin};
 
 // This example game uses States to separate logic
 // See https://bevy-cheatbook.github.io/programming/states.html
@@ -45,6 +48,8 @@ enum GameState {
     Playing,
     // Here the menu is drawn and waiting for player interaction
     Menu,
+
+    Editor,
 }
 
 pub struct GamePlugin;
@@ -54,6 +59,11 @@ impl Plugin for GamePlugin {
         physics_config.timestep_mode = TimestepMode::Fixed {
             dt: 1.0 / 60.0,
             substeps: 1,
+        };
+
+        let gizmo_options = GizmoOptions {
+            gizmo_modes: EnumSet::from_iter(vec![GizmoMode::Rotate, GizmoMode::Translate]),
+            ..Default::default()
         };
 
         app.init_state::<GameState>()
@@ -74,7 +84,14 @@ impl Plugin for GamePlugin {
                 SpeedometerPlugin,
                 ResetPlugin,
                 RaycastVehiclePlugin,
-                // EditorPlugin::default(),
+                editor::EditorPlugin,
+            ))
+            .insert_resource(gizmo_options)
+            .add_plugins((
+                bevy_mod_picking::DefaultPickingPlugins,
+                TransformGizmoPlugin,
+                DefaultEditorCamPlugins,
+                EditorPlugin::default(),
             ));
 
         #[cfg(debug_assertions)]

@@ -76,7 +76,11 @@ bevy_rapier3d = { version = "0.25.0", features = [
 
 # bevy_gltf_collider = { path = "../bevy_gltf_collider" }
 bevy_gltf_collider = { git = "https://github.com/jonastar/bevy_gltf_collider.git" }
-bevy_editor_pls = "0.8.1"
+bevy_editor_pls = { git = "https://github.com/jakobhellermann/bevy_editor_pls.git" }
+bevy_editor_cam = "0.2.0"
+transform-gizmo-bevy = "0.1.0"
+bevy_mod_picking = "0.18.2"
+# bevy_editor_pls = "0.8.1"
 
 [build-dependencies]
 embed-resource = "1"
