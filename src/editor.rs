@@ -2,7 +2,6 @@ use bevy::{
     math::cubic_splines::CubicCurve,
     prelude::*,
     render::{
-        camera,
         mesh::{Indices, PrimitiveTopology},
         render_asset::RenderAssetUsages,
     },
@@ -16,10 +15,7 @@ use bevy_mod_picking::{
     prelude::{ListenerInput, On},
     PickableBundle,
 };
-use bevy_rapier3d::{
-    geometry::{Collider, ComputedColliderShape},
-    rapier::geometry::ColliderShape,
-};
+use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
 use transform_gizmo_bevy::{GizmoCamera, GizmoTarget};
 
 #[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash)]
@@ -32,7 +28,6 @@ enum EditorState {
 use crate::{
     actions::Actions,
     car::{spawn_car_helper, CarBody},
-    loading::TextureAssets,
     GameState,
 };
 
@@ -50,13 +45,16 @@ impl Plugin for EditorPlugin {
                     .before(default_camera_inputs),
             )
             .add_systems(Update, reset.run_if(in_state(EditorState::Testing)))
+            .add_systems(Update, build_segment_curves)
             .add_systems(
                 Update,
                 (
                     visualize_track_segment_splines,
                     generate_track,
                     check_try_map,
-                ),
+                    update_extends_segment_buttons,
+                )
+                    .after(build_segment_curves),
             );
     }
 }
@@ -68,8 +66,6 @@ fn spawn_editor(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    textures: Res<TextureAssets>,
-    mut scenes: ResMut<Assets<Scene>>,
 ) {
     commands.spawn((
         Camera3dBundle {
@@ -116,7 +112,7 @@ fn spawn_editor(
     ));
 
     commands
-        .spawn((TrackSegment, SpatialBundle::default()))
+        .spawn((TrackSegment { built_curve: None }, SpatialBundle::default()))
         .with_children(|builder| {
             builder
                 .spawn(segment_bundle(
@@ -238,7 +234,9 @@ fn disable_camera_movement_on_gizmo(
 }
 
 #[derive(Component)]
-struct TrackSegment;
+struct TrackSegment {
+    built_curve: Option<CubicCurve<Vec3>>,
+}
 
 #[derive(Component, PartialEq, PartialOrd, Ord, Eq)]
 struct TrackSegmentCurvePoint(i32);
@@ -249,15 +247,26 @@ struct TrackSegmentBox;
 #[derive(Component)]
 struct StartPoint;
 
-fn visualize_track_segment_splines(
-    tracks: Query<&Children, With<TrackSegment>>,
-    transforms: Query<(&TrackSegmentCurvePoint, &Transform)>,
-    mut gizmos: Gizmos,
+fn build_segment_curves(
+    changed_tracks: Query<&Parent, (Changed<Transform>, With<TrackSegmentCurvePoint>)>,
+    mut tracks: Query<(&mut TrackSegment, &Children)>,
+    curve_points: Query<(&TrackSegmentCurvePoint, &Transform)>,
 ) {
-    for segment_children in &tracks {
+    let mut updated_tracks = Vec::new();
+    for parent in &changed_tracks {
+        if updated_tracks.contains(&parent.get()) {
+            continue;
+        }
+
+        let Ok((mut track, children)) = tracks.get_mut(parent.get()) else {
+            continue;
+        };
+
+        updated_tracks.push(parent.get());
+
         let mut points = Vec::with_capacity(4);
-        for child in segment_children {
-            let Ok((point, transform)) = transforms.get(*child) else {
+        for child in children {
+            let Ok((point, transform)) = curve_points.get(*child) else {
                 continue;
             };
 
@@ -271,23 +280,41 @@ fn visualize_track_segment_splines(
                 .map(|(_, point)| point)
                 .collect::<Vec<_>>(),
         );
+        let curve: CubicCurve<Vec3> = CubicBezier::new(points).to_curve();
+        track.built_curve = Some(curve);
+    }
+}
 
-        for curve in &points {
-            gizmos.arrow(curve[0], curve[1], Color::CYAN);
-            gizmos.arrow(curve[3], curve[2], Color::CYAN);
+fn visualize_track_segment_splines(
+    tracks: Query<(&TrackSegment, &Children)>,
+    mut gizmos: Gizmos,
+    curve_points: Query<(&TrackSegmentCurvePoint, &Transform)>,
+) {
+    for (track, children) in &tracks {
+        let mut points = Vec::with_capacity(4);
+        for child in children {
+            let Ok((point, transform)) = curve_points.get(*child) else {
+                continue;
+            };
+
+            points.push((point.0, transform.translation));
+        }
+        points.sort_by(|(index_a, _), (index_b, _)| index_a.cmp(index_b));
+        let points = points_to_bezier(
+            points
+                .into_iter()
+                .map(|(_, point)| point)
+                .collect::<Vec<_>>(),
+        );
+
+        for curve in points {
+            gizmos.line(curve[0], curve[1], Color::WHITE);
+            gizmos.line(curve[3], curve[2], Color::WHITE);
         }
 
-        let curve = CubicBezier::new(points).to_curve();
-
-        // let curve = CubicCardinalSpline::new(
-        //     5.0,
-        //     points
-        //         .into_iter()
-        //         .map(|(_, point)| point)
-        //         .collect::<Vec<_>>(),
-        // )
-        // .to_curve();
-        gizmos.linestrip(curve.iter_positions(50), Color::WHITE);
+        if let Some(curve) = &track.built_curve {
+            gizmos.linestrip(curve.iter_positions(50), Color::WHITE);
+        }
     }
 }
 
@@ -296,52 +323,27 @@ fn generate_track(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 
-    changed_tracks: Query<&Parent, (Changed<Transform>, With<TrackSegmentCurvePoint>)>,
-    tracks: Query<&Children, With<TrackSegment>>,
-    curve_points: Query<(&TrackSegmentCurvePoint, &Transform)>,
+    changed_tracks: Query<(Entity, &TrackSegment, &Children), Changed<TrackSegment>>,
     boxes: Query<Entity, With<TrackSegmentBox>>,
-
     mut gizmos: Gizmos,
 ) {
-    let mut updated_tracks = Vec::new();
-    for parent in &changed_tracks {
-        if updated_tracks.contains(&parent.get()) {
-            continue;
+    for (entity, track, children) in &changed_tracks {
+        // Despawn existing graphics and colliders
+        for child in children {
+            if boxes.contains(*child) {
+                commands.entity(*child).despawn_recursive();
+            }
         }
 
-        let Ok(children) = tracks.get(parent.get()) else {
+        let Some(curve) = &track.built_curve else {
             continue;
         };
-
-        updated_tracks.push(parent.get());
-
-        let mut points = Vec::with_capacity(4);
-        for child in children {
-            let Ok((point, transform)) = curve_points.get(*child) else {
-                if boxes.contains(*child) {
-                    commands.entity(*child).despawn_recursive();
-                }
-                continue;
-            };
-
-            points.push((point.0, transform.translation));
-        }
-
-        points.sort_by(|(index_a, _), (index_b, _)| index_a.cmp(index_b));
-
-        let curve = CubicBezier::new(points_to_bezier(
-            points
-                .into_iter()
-                .map(|(_, point)| point)
-                .collect::<Vec<_>>(),
-        ))
-        .to_curve();
 
         let mut iter = curve.iter_positions(50);
         let mut previous = iter.next().unwrap();
         let mut previous_connection_points_world = default_connection_points(previous);
 
-        commands.entity(parent.get()).with_children(|builder| {
+        commands.entity(entity).with_children(|builder| {
             for position in iter {
                 let center = ((position - previous) / 2.0) + previous;
                 // let rot =
@@ -376,8 +378,6 @@ fn generate_track(
                     spawn_transform.transform_point(cur_connection_points_local[3]),
                     Color::YELLOW,
                 );
-                // let cur_connection_points_local =
-                //     global.transform_point(previous_connection_points_world);
 
                 let (mesh, next_connection_points_local) =
                     generate_segment_mesh(length, cur_connection_points_local);
@@ -412,32 +412,9 @@ fn generate_track(
             }
         });
     }
-
-    // for segment_children in &tracks {
-    //     let mut points = Vec::with_capacity(4);
-    //     for child in segment_children {
-    //         let Ok((point, transform)) = transforms.get(*child) else {
-    //             continue;
-    //         };
-
-    //         points.push((point.0, transform.translation));
-    //     }
-
-    //     points.sort_by(|(index_a, _), (index_b, _)| index_a.cmp(index_b));
-
-    //     let curve = CubicCardinalSpline::new(
-    //         5.0,
-    //         points
-    //             .into_iter()
-    //             .map(|(_, point)| point)
-    //             .collect::<Vec<_>>(),
-    //     )
-    //     .to_curve();
-    //     gizmos.linestrip(curve.iter_positions(50), Color::WHITE);
-    // }
 }
 
-const TRACK_WIDTH: f32 = 4.0;
+const TRACK_WIDTH: f32 = 10.0;
 const HALF_TRACK_WIDTH: f32 = TRACK_WIDTH / 2.0;
 const TRACK_HEIGHT: f32 = 1.0;
 const HALF_TRACK_HEIGHT: f32 = TRACK_HEIGHT / 2.0;
@@ -574,21 +551,6 @@ fn generate_segment_mesh(length: f32, connection_points: [Vec3; 4]) -> (Mesh, [V
     )
 }
 
-struct MultiBezier {
-    curves: CubicCurve<Vec3>,
-}
-
-impl MultiBezier {
-    // fn new(points: Vec<Vec3>) -> Self {
-    //     let curves = Vec::new();
-    //     if points.len() < 4 {
-    //         return Self { curves };
-    //     }
-
-    //     let first_segment = CubicBezier::new(control_points)
-    // }
-}
-
 fn points_to_bezier(points: Vec<Vec3>) -> Vec<[Vec3; 4]> {
     let mut converted_points = Vec::with_capacity(points.len() / 2);
 
@@ -668,4 +630,175 @@ fn reset(
 
     let start = query.single().translation;
     spawn_car_helper(start, &mut commands, &mut meshes, &mut materials);
+}
+
+#[derive(Component)]
+enum AddSegmentButton {
+    Start,
+    End,
+}
+
+fn update_extends_segment_buttons(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+
+    segments: Query<(Entity, &Children), Changed<TrackSegment>>,
+    curve_points: Query<(Entity, &TrackSegmentCurvePoint), With<TrackSegmentCurvePoint>>,
+    add_buttons: Query<(Entity, &Parent), With<AddSegmentButton>>,
+) {
+    for (segment_entity, segment_children) in &segments {
+        for (button_entity, button_parent) in &add_buttons {
+            if button_parent.get() == segment_entity {
+                commands.entity(button_entity).despawn_recursive()
+            } else if curve_points.contains(button_parent.get()) {
+                commands.entity(button_entity).despawn_recursive()
+            }
+        }
+
+        if segment_children.is_empty() {
+            // spawn a single button here
+            commands.entity(segment_entity).with_children(|builder| {
+                builder.spawn(add_segment_button_bundle(
+                    &mut meshes,
+                    &mut materials,
+                    AddSegmentButton::Start,
+                ));
+            });
+
+            continue;
+        }
+
+        let mut low: Option<(Entity, &TrackSegmentCurvePoint)> = None;
+        let mut high: Option<(Entity, &TrackSegmentCurvePoint)> = None;
+
+        // Find the start and end segments
+        for child in segment_children {
+            let Ok((entity, curve_point)) = curve_points.get(*child) else {
+                continue;
+            };
+
+            if let Some(inner_low) = low {
+                if inner_low.1 .0 > curve_point.0 {
+                    low = Some((entity, curve_point));
+                }
+            } else {
+                low = Some((entity, curve_point));
+            }
+
+            if let Some(inner_high) = high {
+                if inner_high.1 .0 < curve_point.0 {
+                    high = Some((entity, curve_point));
+                }
+            } else {
+                high = Some((entity, curve_point));
+            }
+        }
+
+        if let Some(low) = low {
+            // Spawn point on start
+            commands.entity(low.0).with_children(|builder| {
+                builder.spawn(add_segment_button_bundle(
+                    &mut meshes,
+                    &mut materials,
+                    AddSegmentButton::Start,
+                ));
+            });
+
+            if let Some(high) = high {
+                if low.0 != high.0 {
+                    // Spawn point on end
+                    commands.entity(high.0).with_children(|builder| {
+                        builder.spawn(add_segment_button_bundle(
+                            &mut meshes,
+                            &mut materials,
+                            AddSegmentButton::End,
+                        ));
+                    });
+                }
+            }
+        }
+    }
+}
+
+fn add_segment_button_bundle(
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    kind: AddSegmentButton,
+) -> impl Bundle {
+    (
+        PbrBundle {
+            mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+            material: materials.add(Color::rgb(0.4, 0.1, 1.0)),
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, -2.0)),
+            ..default()
+        },
+        PickableBundle::default(),
+        kind,
+        On::<Pointer<Click>>::run(clicked_add_segment_button),
+    )
+}
+
+fn clicked_add_segment_button(
+    mut commands: Commands,
+    input: Res<ListenerInput<Pointer<Click>>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+
+    add_buttons: Query<(&AddSegmentButton, &Parent)>,
+    segments: Query<(Entity, &Children), Changed<TrackSegment>>,
+    curve_points: Query<
+        (Entity, &TrackSegmentCurvePoint, &Parent, &Transform),
+        With<TrackSegmentCurvePoint>,
+    >,
+) {
+    let Ok((add_button_type, button_parent)) = add_buttons.get(input.target) else {
+        return;
+    };
+
+    // Find the relevant track segment
+    let (entity, children, position) = if let Ok(res) = segments.get(button_parent.get()) {
+        (res.0, res.1, Vec3::ZERO)
+    } else {
+        if let Ok(curve) = curve_points.get(button_parent.get()) {
+            if let Ok(segment) = segments.get(curve.2.get()) {
+                (segment.0, segment.1, curve.3.translation)
+            } else {
+                return;
+            }
+        } else {
+            return;
+        }
+    };
+
+    let (index_0, index_1) = match add_button_type {
+        AddSegmentButton::Start => children
+            .iter()
+            .filter_map(|child| curve_points.get(*child).ok().map(|(_, p, _, _)| p.0))
+            .min()
+            .map(|v| (v - 1, v - 2))
+            .unwrap_or((0, 1)),
+        AddSegmentButton::End => children
+            .iter()
+            .filter_map(|child| curve_points.get(*child).ok().map(|(_, p, _, _)| p.0))
+            .max()
+            .map(|v| (v + 1, v + 2))
+            .unwrap_or((0, 1)),
+    };
+
+    commands.entity(entity).with_children(|builder| {
+        builder.spawn(segment_bundle(
+            &mut meshes,
+            &mut materials,
+            index_0,
+            Transform::from_translation(position + Vec3::new(2., 0.0, 0.)),
+        ));
+
+        builder.spawn(segment_bundle(
+            &mut meshes,
+            &mut materials,
+            index_1,
+            Transform::from_translation(position + Vec3::new(3., 2.0, 0.)),
+        ));
+    });
 }
