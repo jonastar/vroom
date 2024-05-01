@@ -25,13 +25,11 @@ impl Plugin for CarPlugin {
             .add_systems(OnExit(GameState::Playing), despawn_car)
             .add_systems(
                 FixedUpdate,
-                (
-                    move_car_raycast,
-                    turn_front_wheels,
-                    apply_wheel_tuning,
-                    camera_look_at::<CarBody>,
-                )
-                    .run_if(in_state(GameState::Playing)),
+                (move_car_raycast, turn_front_wheels, apply_wheel_tuning),
+            )
+            .add_systems(
+                FixedUpdate,
+                (camera_look_at::<CarBody>).run_if(in_state(GameState::Playing)),
             );
         // .add_systems(
         //     Update,
@@ -62,6 +60,15 @@ fn spawn_car(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    spawn_car_helper(START_POSITION, &mut commands, &mut meshes, &mut materials);
+}
+
+pub fn spawn_car_helper(
+    start_position: Vec3,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
     let tuning = WheelTuning {
         suspension_stiffness: 20.0,
         suspension_compression: 10.0,
@@ -81,7 +88,7 @@ fn spawn_car(
             PbrBundle {
                 mesh: meshes.add(Cuboid::new(1.25, 0.5, 2.0)),
                 material: materials.add(Color::rgb(0.2, 0.1, 0.3)),
-                transform: Transform::from_translation(START_POSITION),
+                transform: Transform::from_translation(start_position),
                 ..default()
             },
             CarBody,
@@ -148,8 +155,8 @@ fn spawn_car(
 
             // Front Wheels
             spawn_wheel(
-                &mut meshes,
-                &mut materials,
+                meshes,
+                materials,
                 car,
                 car.parent_entity(),
                 Vec3 {
@@ -162,8 +169,8 @@ fn spawn_car(
             );
 
             spawn_wheel(
-                &mut meshes,
-                &mut materials,
+                meshes,
+                materials,
                 car,
                 car.parent_entity(),
                 Vec3 {
@@ -178,8 +185,8 @@ fn spawn_car(
             // Back wheels
 
             spawn_wheel(
-                &mut meshes,
-                &mut materials,
+                meshes,
+                materials,
                 car,
                 car.parent_entity(),
                 Vec3 {
@@ -192,8 +199,8 @@ fn spawn_car(
             );
 
             spawn_wheel(
-                &mut meshes,
-                &mut materials,
+                meshes,
+                materials,
                 car,
                 car.parent_entity(),
                 Vec3 {
@@ -329,7 +336,10 @@ fn turn_front_wheels(
     let x_input = actions.player_movement.map(|v| v.x).unwrap_or_default();
     *steering_wheel = steering_wheel.lerp(x_input, time.delta_seconds() * 10.0);
 
-    let (body_transform, body_vel) = cat_bodies.single();
+    let Ok((body_transform, body_vel)) = cat_bodies.get_single() else {
+        return;
+    };
+
     let speed = body_vel
         .linvel
         .project_onto(body_transform.forward().into())

@@ -15,10 +15,8 @@ pub struct ActionsPlugin;
 // Actions can then be used as a resource in other systems to act on the player input.
 impl Plugin for ActionsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Actions>().add_systems(
-            Update,
-            set_movement_actions.run_if(in_state(GameState::Playing)),
-        );
+        app.init_resource::<Actions>()
+            .add_systems(Update, set_movement_actions);
     }
 }
 
@@ -27,6 +25,7 @@ pub struct Actions {
     pub player_movement: Option<Vec2>,
     pub breaking: bool,
     pub reset: bool,
+    pub try_map: bool,
 }
 
 pub fn set_movement_actions(
@@ -62,4 +61,5 @@ pub fn set_movement_actions(
 
     actions.reset = keyboard_input.just_pressed(KeyCode::KeyR);
     actions.breaking = keyboard_input.pressed(KeyCode::Space);
+    actions.try_map = keyboard_input.pressed(KeyCode::Enter);
 }
