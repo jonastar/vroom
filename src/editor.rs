@@ -112,7 +112,14 @@ fn spawn_editor(
     ));
 
     commands
-        .spawn((TrackSegment { built_curve: None }, SpatialBundle::default()))
+        .spawn((
+            TrackSegment {
+                built_curve: None,
+                rotations: None,
+                bezier_segments: Vec::new(),
+            },
+            SpatialBundle::default(),
+        ))
         .with_children(|builder| {
             builder
                 .spawn(segment_bundle(
@@ -236,6 +243,8 @@ fn disable_camera_movement_on_gizmo(
 #[derive(Component)]
 struct TrackSegment {
     built_curve: Option<CubicCurve<Vec3>>,
+    bezier_segments: Vec<[(Vec3, Quat); 4]>,
+    rotations: Option<Quat>,
 }
 
 #[derive(Component, PartialEq, PartialOrd, Ord, Eq)]
@@ -270,18 +279,21 @@ fn build_segment_curves(
                 continue;
             };
 
-            points.push((point.0, transform.translation));
+            points.push((point.0, transform.translation, transform.rotation));
         }
 
-        points.sort_by(|(index_a, _), (index_b, _)| index_a.cmp(index_b));
+        points.sort_by(|(index_a, _, _), (index_b, _, _)| index_a.cmp(index_b));
+
         let points = points_to_bezier(
             points
                 .into_iter()
-                .map(|(_, point)| point)
+                .map(|(_, point, rot)| (point, rot))
                 .collect::<Vec<_>>(),
         );
-        let curve: CubicCurve<Vec3> = CubicBezier::new(points).to_curve();
+        let points_only: Vec<_> = points.iter().map(|v| v.map(|iv| iv.0)).collect();
+        let curve: CubicCurve<Vec3> = CubicBezier::new(points_only).to_curve();
         track.built_curve = Some(curve);
+        track.bezier_segments = points;
     }
 }
 
@@ -297,19 +309,19 @@ fn visualize_track_segment_splines(
                 continue;
             };
 
-            points.push((point.0, transform.translation));
+            points.push((point.0, transform.translation, transform.rotation));
         }
-        points.sort_by(|(index_a, _), (index_b, _)| index_a.cmp(index_b));
+        points.sort_by(|(index_a, _, _), (index_b, _, _)| index_a.cmp(index_b));
         let points = points_to_bezier(
             points
                 .into_iter()
-                .map(|(_, point)| point)
+                .map(|(_, point, rot)| (point, rot))
                 .collect::<Vec<_>>(),
         );
 
         for curve in points {
-            gizmos.line(curve[0], curve[1], Color::WHITE);
-            gizmos.line(curve[3], curve[2], Color::WHITE);
+            gizmos.line(curve[0].0, curve[1].0, Color::WHITE);
+            gizmos.line(curve[3].0, curve[2].0, Color::WHITE);
         }
 
         if let Some(curve) = &track.built_curve {
@@ -339,76 +351,97 @@ fn generate_track(
             continue;
         };
 
-        let mut iter = curve.iter_positions(50);
-        let mut previous = iter.next().unwrap();
-        let mut previous_connection_points_world = default_connection_points(previous);
+        if track.bezier_segments.is_empty() {
+            continue;
+        }
+        let start_position = curve.position(0.0);
+
+        let mut previous_pos = start_position;
+        let mut previous_connection_points_world = default_connection_points(previous_pos);
 
         commands.entity(entity).with_children(|builder| {
-            for position in iter {
-                let center = ((position - previous) / 2.0) + previous;
-                // let rot =
-                let length = position.distance(previous);
-                let spawn_transform =
-                    Transform::from_translation(center).looking_at(previous, Vec3::Y);
+            for segment_index in 0..track.bezier_segments.len() {
+                let subdivisions = 10;
 
-                let inversed = spawn_transform.compute_affine().inverse();
-                let cur_connection_points_local = [
-                    inversed.transform_point(previous_connection_points_world[0]),
-                    inversed.transform_point(previous_connection_points_world[1]),
-                    inversed.transform_point(previous_connection_points_world[2]),
-                    inversed.transform_point(previous_connection_points_world[3]),
-                ];
-                gizmos.line(
-                    spawn_transform.translation,
-                    spawn_transform.transform_point(cur_connection_points_local[0]),
-                    Color::RED,
-                );
-                gizmos.line(
-                    spawn_transform.translation,
-                    spawn_transform.transform_point(cur_connection_points_local[1]),
-                    Color::GREEN,
-                );
-                gizmos.line(
-                    spawn_transform.translation,
-                    spawn_transform.transform_point(cur_connection_points_local[2]),
-                    Color::BLUE,
-                );
-                gizmos.line(
-                    spawn_transform.translation,
-                    spawn_transform.transform_point(cur_connection_points_local[3]),
-                    Color::YELLOW,
-                );
+                let start_rot = track.bezier_segments[segment_index][0].1;
+                let end_rot = track.bezier_segments[segment_index][3].1;
 
-                let (mesh, next_connection_points_local) =
-                    generate_segment_mesh(length, cur_connection_points_local);
+                for sub_index in 0..subdivisions {
+                    if segment_index == 0 && sub_index == 0 {
+                        continue;
+                    }
 
-                let collider = Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::ConvexHull);
+                    let local_t = sub_index as f32 / subdivisions as f32;
+                    let global_t = segment_index as f32 + local_t;
+                    let position = curve.position(global_t);
 
-                previous_connection_points_world[0] =
-                    spawn_transform.transform_point(next_connection_points_local[0]);
-                previous_connection_points_world[1] =
-                    spawn_transform.transform_point(next_connection_points_local[1]);
-                previous_connection_points_world[2] =
-                    spawn_transform.transform_point(next_connection_points_local[2]);
-                previous_connection_points_world[3] =
-                    spawn_transform.transform_point(next_connection_points_local[3]);
+                    let center = ((position - previous_pos) / 2.0) + previous_pos;
 
-                let mut another_builder = builder.spawn((
-                    PbrBundle {
-                        // mesh: meshes.add(Cuboid::new(1.0, 1.0, length)),
-                        mesh: meshes.add(mesh),
-                        material: materials.add(Color::rgb(0.0, 0.5, 0.3)),
-                        transform: spawn_transform,
-                        ..default()
-                    },
-                    TrackSegmentBox,
-                ));
+                    let length = position.distance(previous_pos);
+                    let interpolated_rot = start_rot.lerp(end_rot, local_t);
+                    let spawn_transform = Transform::from_translation(center)
+                        .looking_at(previous_pos, interpolated_rot * Vec3::Y);
 
-                if let Some(collider) = collider {
-                    another_builder.insert(collider);
+                    let inversed = spawn_transform.compute_affine().inverse();
+                    let cur_connection_points_local = [
+                        inversed.transform_point(previous_connection_points_world[0]),
+                        inversed.transform_point(previous_connection_points_world[1]),
+                        inversed.transform_point(previous_connection_points_world[2]),
+                        inversed.transform_point(previous_connection_points_world[3]),
+                    ];
+                    gizmos.line(
+                        spawn_transform.translation,
+                        spawn_transform.transform_point(cur_connection_points_local[0]),
+                        Color::RED,
+                    );
+                    gizmos.line(
+                        spawn_transform.translation,
+                        spawn_transform.transform_point(cur_connection_points_local[1]),
+                        Color::GREEN,
+                    );
+                    gizmos.line(
+                        spawn_transform.translation,
+                        spawn_transform.transform_point(cur_connection_points_local[2]),
+                        Color::BLUE,
+                    );
+                    gizmos.line(
+                        spawn_transform.translation,
+                        spawn_transform.transform_point(cur_connection_points_local[3]),
+                        Color::YELLOW,
+                    );
+
+                    let (mesh, next_connection_points_local) =
+                        generate_segment_mesh(length, cur_connection_points_local);
+
+                    let collider =
+                        Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::ConvexHull);
+
+                    previous_connection_points_world[0] =
+                        spawn_transform.transform_point(next_connection_points_local[0]);
+                    previous_connection_points_world[1] =
+                        spawn_transform.transform_point(next_connection_points_local[1]);
+                    previous_connection_points_world[2] =
+                        spawn_transform.transform_point(next_connection_points_local[2]);
+                    previous_connection_points_world[3] =
+                        spawn_transform.transform_point(next_connection_points_local[3]);
+
+                    let mut another_builder = builder.spawn((
+                        PbrBundle {
+                            // mesh: meshes.add(Cuboid::new(1.0, 1.0, length)),
+                            mesh: meshes.add(mesh),
+                            material: materials.add(Color::rgb(0.0, 0.5, 0.3)),
+                            transform: spawn_transform,
+                            ..default()
+                        },
+                        TrackSegmentBox,
+                    ));
+
+                    if let Some(collider) = collider {
+                        another_builder.insert(collider);
+                    }
+
+                    previous_pos = position;
                 }
-
-                previous = position;
             }
         });
     }
@@ -437,12 +470,6 @@ fn generate_segment_mesh(length: f32, connection_points: [Vec3; 4]) -> (Mesh, [V
     let min = -half_size;
     let max = half_size;
 
-    // let next_connection_points = [
-    //     Vec3::new(min.x, max.y, min.z),
-    //     Vec3::new(max.x, max.y, min.z),
-    //     Vec3::new(max.x, min.y, min.z),
-    //     Vec3::new(min.x, min.y, min.z),
-    // ];
     let next_connection_points = [
         Vec3::new(min.x, max.y, max.z),
         Vec3::new(max.x, max.y, max.z),
@@ -551,7 +578,7 @@ fn generate_segment_mesh(length: f32, connection_points: [Vec3; 4]) -> (Mesh, [V
     )
 }
 
-fn points_to_bezier(points: Vec<Vec3>) -> Vec<[Vec3; 4]> {
+fn points_to_bezier(points: Vec<(Vec3, Quat)>) -> Vec<[(Vec3, Quat); 4]> {
     let mut converted_points = Vec::with_capacity(points.len() / 2);
 
     let mut iter = points.into_iter();
@@ -575,9 +602,9 @@ fn points_to_bezier(points: Vec<Vec3>) -> Vec<[Vec3; 4]> {
     loop {
         let p0 = prev_p3;
 
-        let p1_local_inverted = -(prev_p2 - p0);
+        let p1_local_inverted = -(prev_p2.0 - p0.0);
 
-        let p1 = p1_local_inverted + p0;
+        let p1 = p1_local_inverted + p0.0;
 
         let Some(p2) = iter.next() else {
             return converted_points;
@@ -589,7 +616,7 @@ fn points_to_bezier(points: Vec<Vec3>) -> Vec<[Vec3; 4]> {
         prev_p2 = p2;
         prev_p3 = p3;
 
-        converted_points.push([p0, p1, p2, p3]);
+        converted_points.push([p0, (p1, prev_p2.1), p2, p3]);
     }
 }
 
