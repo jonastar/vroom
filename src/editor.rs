@@ -21,6 +21,7 @@ use crate::{
     actions::Actions,
     car::{spawn_car_helper, CarBody},
     map::{points_to_bezier_segments, Track},
+    scene::camera_look_at,
     GameState,
 };
 
@@ -42,6 +43,10 @@ impl Plugin for EditorPlugin {
             .add_systems(
                 Update,
                 (check_try_map, update_extends_segment_buttons).after(build_segment_curves),
+            )
+            .add_systems(
+                FixedUpdate,
+                (camera_look_at::<CarBody>).run_if(in_state(EditorState::Testing)),
             );
     }
 }
@@ -107,10 +112,6 @@ fn spawn_editor(
                 (Vec3::new(10.0, 1.0, 0.0), Quat::IDENTITY),
                 (Vec3::new(15.0, 1.0, 0.0), Quat::IDENTITY),
                 (Vec3::new(20.0, 0.0, 0.0), Quat::IDENTITY),
-                (Vec3::new(25.0, 1.0, 0.0), Quat::IDENTITY),
-                (Vec3::new(30.0, 0.0, 0.0), Quat::IDENTITY),
-                (Vec3::new(35.0, 1.0, 0.0), Quat::IDENTITY),
-                (Vec3::new(40.0, 0.0, 0.0), Quat::IDENTITY),
             ],
         },
         SpatialBundle::default(),
