@@ -164,6 +164,11 @@ fn generate_track(
 
                     let length = position.distance(previous_pos);
                     let interpolated_rot = start_rot.lerp(end_rot, local_t);
+                    gizmos.arrow(
+                        center,
+                        center + (interpolated_rot * Vec3::Y) * 10.0,
+                        Color::RED,
+                    );
                     let spawn_transform = Transform::from_translation(center)
                         .looking_at(previous_pos, interpolated_rot * Vec3::Y);
 
