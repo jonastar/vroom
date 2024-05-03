@@ -4,13 +4,17 @@ mod actions;
 mod audio;
 mod car;
 mod editor;
+mod editor_ui;
 mod loading;
+mod map;
+mod map_file;
 mod menu;
 mod player;
 mod raycast_vehicle_controller;
 mod reset_transform;
 mod scene;
 mod speedometer;
+mod ui_util;
 
 use std::time::Duration;
 
@@ -85,7 +89,9 @@ impl Plugin for GamePlugin {
                 ResetPlugin,
                 RaycastVehiclePlugin,
                 editor::EditorPlugin,
+                editor_ui::EditorUiPlugin,
             ))
+            .add_plugins((map_file::MapFilePlugin, map::MapPlugin))
             .insert_resource(gizmo_options)
             .add_plugins((
                 bevy_mod_picking::DefaultPickingPlugins,
