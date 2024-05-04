@@ -2,7 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use bevy::asset::AssetMetaCheck;
+use bevy::pbr::wireframe::WireframePlugin;
 use bevy::prelude::*;
+use bevy::render::settings::{RenderCreation, WgpuFeatures, WgpuSettings};
+use bevy::render::RenderPlugin;
 use bevy::window::PrimaryWindow;
 use bevy::winit::WinitWindows;
 use bevy::DefaultPlugins;
@@ -15,17 +18,29 @@ fn main() {
         .insert_resource(Msaa::Off)
         .insert_resource(AssetMetaCheck::Never)
         .insert_resource(ClearColor(Color::rgb(0.4, 0.4, 0.4)))
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Bevy game".to_string(), // ToDo
-                // Bind to canvas included in `index.html`
-                canvas: Some("#bevy".to_owned()),
-                // Tells wasm not to override default event handling, like F5 and Ctrl+R
-                prevent_default_event_handling: false,
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Bevy game".to_string(), // ToDo
+                        // Bind to canvas included in `index.html`
+                        canvas: Some("#bevy".to_owned()),
+                        // Tells wasm not to override default event handling, like F5 and Ctrl+R
+                        prevent_default_event_handling: false,
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(RenderPlugin {
+                    render_creation: RenderCreation::Automatic(WgpuSettings {
+                        // WARN this is a native only feature. It will not work with webgl or webgpu
+                        features: WgpuFeatures::POLYGON_MODE_LINE,
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        )
+        // .add_plugins(WireframePlugin)
         .add_plugins(GamePlugin)
         .add_systems(Startup, set_window_icon)
         .run();

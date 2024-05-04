@@ -1,12 +1,16 @@
 use bevy::{
     math::cubic_splines::CubicCurve,
+    pbr::wireframe::Wireframe,
     prelude::*,
     render::{
         mesh::{Indices, PrimitiveTopology},
         render_asset::RenderAssetUsages,
     },
 };
-use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
+use bevy_rapier3d::{
+    geometry::{Collider, ComputedColliderShape, VHACDParameters},
+    math::{Rot, Vect},
+};
 
 use crate::map_file::{LoadMap, MapFile, PrepareSaveMap, SavedTrack};
 
@@ -146,7 +150,7 @@ fn generate_track(
 
         commands.entity(entity).with_children(|builder| {
             for segment_index in 0..track.bezier_segments.len() {
-                let subdivisions = 10;
+                let subdivisions = 50;
 
                 let start_rot = track.bezier_segments[segment_index][0].1;
                 let end_rot = track.bezier_segments[segment_index][3].1;
@@ -200,11 +204,13 @@ fn generate_track(
                         Color::YELLOW,
                     );
 
-                    let (mesh, next_connection_points_local) =
+                    let (mesh, collider, next_connection_points_local) =
                         generate_segment_mesh(length, cur_connection_points_local);
 
-                    let collider =
-                        Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::ConvexHull);
+                    // let collider = Collider::from_bevy_mesh(
+                    //     &mesh,
+                    //     &ComputedColliderShape::ConvexDecomposition(VHACDParameters::default()),
+                    // );
 
                     previous_connection_points_world[0] =
                         spawn_transform.transform_point(next_connection_points_local[0]);
@@ -224,11 +230,13 @@ fn generate_track(
                             ..default()
                         },
                         GeneratedTrackSegment,
+                        // Wireframe,
                     ));
 
-                    if let Some(collider) = collider {
-                        another_builder.insert(collider);
-                    }
+                    another_builder.insert(collider);
+                    // if let Some(collider) = collider {
+                    //     another_builder.insert(collider);
+                    // }
 
                     previous_pos = position;
                 }
@@ -255,7 +263,7 @@ fn default_connection_points(position: Vec3) -> [Vec3; 4] {
     next_connection_points
 }
 
-fn generate_segment_mesh(length: f32, connection_points: [Vec3; 4]) -> (Mesh, [Vec3; 4]) {
+fn generate_segment_mesh(length: f32, connection_points: [Vec3; 4]) -> (Mesh, Collider, [Vec3; 4]) {
     let half_size = Vec3::new(HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, length / 2.0);
     let min = -half_size;
     let max = half_size;
@@ -352,7 +360,88 @@ fn generate_segment_mesh(length: f32, connection_points: [Vec3; 4]) -> (Mesh, [V
         8, 9, 10, 10, 11, 8, // right
         12, 13, 14, 14, 15, 12, // left
         16, 17, 18, 18, 19, 16, // top
-        20, 21, 22, 22, 23, 20, // bottom
+        // 20, 21, 22, 22, 23, 20, // bottom
+        21, 22, 23, 23, 20, 21, // bottom
+    ]);
+
+    // let collider_a_indices = [
+    //     16, 17, 18, // top
+
+    // ];
+
+    // Collider::convex_mesh
+
+    let collider = Collider::compound(vec![
+        (
+            // Top
+            Vect::ZERO,
+            Rot::IDENTITY,
+            Collider::triangle(
+                positions[16].into(),
+                positions[17].into(),
+                positions[18].into(),
+            ),
+        ),
+        (
+            // Top
+            Vect::ZERO,
+            Rot::IDENTITY,
+            Collider::triangle(
+                positions[18].into(),
+                positions[19].into(),
+                positions[16].into(),
+            ),
+        ),
+        // (
+        //     // Left
+        //     Vect::ZERO,
+        //     Rot::IDENTITY,
+        //     Collider::triangle(
+        //         positions[12].into(),
+        //         positions[13].into(),
+        //         positions[14].into(),
+        //     ),
+        // ),
+        // (
+        //     // Left
+        //     Vect::ZERO,
+        //     Rot::IDENTITY,
+        //     Collider::triangle(
+        //         positions[14].into(),
+        //         positions[15].into(),
+        //         positions[12].into(),
+        //     ),
+        // ),
+        // (
+        //     // Back
+        //     Vect::ZERO,
+        //     Rot::IDENTITY,
+        //     Collider::triangle(
+        //         positions[4].into(),
+        //         positions[5].into(),
+        //         positions[6].into(),
+        //     ),
+        // ),
+        // (
+        //     // Back
+        //     Vect::ZERO,
+        //     Rot::IDENTITY,
+        //     Collider::triangle(
+        //         positions[6].into(),
+        //         positions[7].into(),
+        //         positions[4].into(),
+        //     ),
+        // ),
+        // (
+        //     // half-cross
+        //     Vect::ZERO,
+        //     Rot::IDENTITY,
+        //     Collider::triangle(
+        //         positions[12].into(),
+        //         positions[13].into(),
+        //         positions[17].into(),
+        //     ),
+        // ),
     ]);
 
     (
@@ -364,6 +453,7 @@ fn generate_segment_mesh(length: f32, connection_points: [Vec3; 4]) -> (Mesh, [V
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
         .with_inserted_indices(indices),
+        collider,
         next_connection_points,
     )
 }
