@@ -26,6 +26,7 @@ pub struct Actions {
     pub breaking: bool,
     pub reset: bool,
     pub try_map: bool,
+    pub toggle_seam: bool,
 }
 
 pub fn set_movement_actions(
@@ -62,4 +63,5 @@ pub fn set_movement_actions(
     actions.reset = keyboard_input.just_pressed(KeyCode::KeyR);
     actions.breaking = keyboard_input.pressed(KeyCode::Space);
     actions.try_map = keyboard_input.pressed(KeyCode::Enter);
+    actions.toggle_seam = keyboard_input.just_pressed(KeyCode::KeyT);
 }
