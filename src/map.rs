@@ -337,6 +337,16 @@ fn generate_segment_mesh(
         Vec3::new(min.x, min.y, max.z),
     ];
 
+    let front_top_left = [max.x, max.y, max.z];
+    let front_bottom_left = [max.x, min.y, max.z];
+    let front_top_right = [min.x, max.y, max.z];
+    let front_bottom_right = [min.x, min.y, max.z];
+
+    let back_top_left = [max.x, max.y, min.z];
+    let back_bottom_left = [max.x, min.y, min.z];
+    let back_top_right = [min.x, max.y, min.z];
+    let back_bottom_right = [min.x, min.y, min.z];
+
     // Suppose Y-up right hand, and camera look from +Z to -Z
     let vertices = &[
         // Front
