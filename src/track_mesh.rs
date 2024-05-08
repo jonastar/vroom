@@ -12,7 +12,7 @@ use bevy_rapier3d::{
 
 use crate::actions::Actions;
 
-const TRACK_WIDTH: f32 = 10.0;
+const TRACK_WIDTH: f32 = 20.0;
 const HALF_TRACK_WIDTH: f32 = TRACK_WIDTH / 2.0;
 const TRACK_HEIGHT: f32 = 1.0;
 const HALF_TRACK_HEIGHT: f32 = TRACK_HEIGHT / 2.0;
@@ -40,6 +40,8 @@ pub fn generate_segment_mesh_new(
     buffers: &mut MeshGeneratorBuffers,
     length: f32,
     connection_points: [Vec3; 4],
+    generate_front: bool,
+    generate_back: bool,
 ) -> (Mesh, [Vec3; 4]) {
     let half_size = Vec3::new(HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, length / 2.0);
     let min = -half_size;
@@ -80,10 +82,78 @@ pub fn generate_segment_mesh_new(
         10,
     );
 
-    dbg!(&top_faces);
     for face in top_faces {
         insert_face(&mut buffers.vertices, &mut indices, face, Vec3::Y);
     }
+
+    // Left
+    insert_face(
+        &mut buffers.vertices,
+        &mut indices,
+        [
+            front_top_left,
+            back_top_left,
+            back_bottom_left,
+            front_bottom_left,
+        ],
+        -Vec3::X,
+    );
+
+    // Right
+    insert_face(
+        &mut buffers.vertices,
+        &mut indices,
+        [
+            back_top_right,
+            front_top_right,
+            front_bottom_right,
+            back_bottom_right,
+        ],
+        Vec3::X,
+    );
+
+    // Front
+    if generate_front {
+        insert_face(
+            &mut buffers.vertices,
+            &mut indices,
+            [
+                front_bottom_left,
+                front_bottom_right,
+                front_top_right,
+                front_top_left,
+            ],
+            Vec3::Z,
+        );
+    }
+
+    // Back
+    if generate_back {
+        insert_face(
+            &mut buffers.vertices,
+            &mut indices,
+            [
+                back_top_left,
+                back_top_right,
+                back_bottom_right,
+                back_bottom_left,
+            ],
+            -Vec3::Z,
+        );
+    }
+
+    // Bottom
+    insert_face(
+        &mut buffers.vertices,
+        &mut indices,
+        [
+            back_bottom_left,
+            back_bottom_right,
+            front_bottom_right,
+            front_bottom_left,
+        ],
+        -Vec3::Z,
+    );
 
     let positions: Vec<_> = buffers.vertices.iter().map(|(p, _, _)| *p).collect();
     let normals: Vec<_> = buffers.vertices.iter().map(|(_, n, _)| *n).collect();

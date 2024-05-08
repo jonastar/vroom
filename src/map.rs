@@ -1,5 +1,5 @@
 use bevy::{math::cubic_splines::CubicCurve, pbr::wireframe::Wireframe, prelude::*};
-use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
+use bevy_rapier3d::geometry::{Collider, ComputedColliderShape, VHACDParameters};
 
 use crate::{
     map_file::{LoadMap, MapFile, PrepareSaveMap, SavedTrack},
@@ -244,14 +244,26 @@ fn generate_track(
                     Color::YELLOW,
                 );
 
+                let generate_back = segment_index == track.bezier_segments.len() - 1
+                    && sub_index == subdivisions - 1;
+
                 let (mesh, next_connection_points_local) = generate_segment_mesh_new(
                     &mut mesh_gen_buf,
                     length,
                     cur_connection_points_local,
+                    generate_back,
+                    segment_index == 0 && sub_index == 1,
                 );
                 mesh_gen_buf.clear();
                 // let (mesh, collider, next_connection_points_local) =
                 //     generate_segment_mesh(length, cur_connection_points_local);
+
+                // let collider = Collider::from_bevy_mesh(
+                //     &mesh,
+                //     &ComputedColliderShape::ConvexDecomposition(VHACDParameters {
+                //         ..Default::default()
+                //     }),
+                // );
 
                 let collider = Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh);
 
