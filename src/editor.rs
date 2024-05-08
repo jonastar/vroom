@@ -255,7 +255,7 @@ fn check_try_map(actions: Res<Actions>, mut next_state: ResMut<NextState<EditorS
     }
 
     info!("Setting to testing");
-    // next_state.set(EditorState::Testing);
+    next_state.set(EditorState::Testing);
 }
 
 fn try_map(

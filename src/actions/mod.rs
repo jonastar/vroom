@@ -62,6 +62,6 @@ pub fn set_movement_actions(
 
     actions.reset = keyboard_input.just_pressed(KeyCode::KeyR);
     actions.breaking = keyboard_input.pressed(KeyCode::Space);
-    actions.try_map = keyboard_input.pressed(KeyCode::Enter);
+    actions.try_map = keyboard_input.just_pressed(KeyCode::KeyK);
     actions.toggle_seam = keyboard_input.just_pressed(KeyCode::KeyT);
 }

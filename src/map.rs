@@ -1,20 +1,9 @@
-use bevy::{
-    math::cubic_splines::CubicCurve,
-    pbr::wireframe::Wireframe,
-    prelude::*,
-    render::{
-        mesh::{Indices, PrimitiveTopology},
-        render_asset::RenderAssetUsages,
-    },
-};
-use bevy_rapier3d::{
-    geometry::{Collider, ComputedColliderShape, VHACDParameters},
-    math::{Rot, Vect},
-};
+use bevy::{math::cubic_splines::CubicCurve, pbr::wireframe::Wireframe, prelude::*};
+use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
 
 use crate::{
-    actions::Actions,
     map_file::{LoadMap, MapFile, PrepareSaveMap, SavedTrack},
+    track_mesh::{generate_segment_mesh_new, MeshGeneratorBuffers, RotatedSeam},
 };
 
 pub struct MapPlugin;
@@ -24,14 +13,7 @@ impl Plugin for MapPlugin {
         app.insert_resource(RotatedSeam(false))
             .add_systems(LoadMap, load_tracks)
             .add_systems(PrepareSaveMap, save_tracks)
-            .add_systems(
-                Update,
-                (
-                    generate_tracks,
-                    visualize_track_segment_splines,
-                    toggle_seam,
-                ),
-            );
+            .add_systems(Update, (generate_tracks, visualize_track_segment_splines));
     }
 }
 
@@ -127,9 +109,6 @@ fn visualize_track_segment_splines(tracks: Query<&Track>, mut gizmos: Gizmos) {
     }
 }
 
-#[derive(Resource, Debug)]
-struct RotatedSeam(bool);
-
 #[derive(Component)]
 struct GeneratedTrackSegment;
 
@@ -207,9 +186,11 @@ fn generate_track(
     let mut previous_pos = start_position;
     let mut previous_connection_points_world = default_connection_points(previous_pos);
 
+    let mut mesh_gen_buf = MeshGeneratorBuffers::default();
+
     commands.entity(entity).with_children(|builder| {
         for segment_index in 0..track.bezier_segments.len() {
-            let subdivisions = 20;
+            let subdivisions = 40;
 
             let start_rot = track.bezier_segments[segment_index][0].1;
             let end_rot = track.bezier_segments[segment_index][3].1;
@@ -263,13 +244,16 @@ fn generate_track(
                     Color::YELLOW,
                 );
 
-                let (mesh, collider, next_connection_points_local) =
-                    generate_segment_mesh(length, cur_connection_points_local, seam);
+                let (mesh, next_connection_points_local) = generate_segment_mesh_new(
+                    &mut mesh_gen_buf,
+                    length,
+                    cur_connection_points_local,
+                );
+                mesh_gen_buf.clear();
+                // let (mesh, collider, next_connection_points_local) =
+                //     generate_segment_mesh(length, cur_connection_points_local);
 
-                // let collider = Collider::from_bevy_mesh(
-                //     &mesh,
-                //     &ComputedColliderShape::ConvexDecomposition(VHACDParameters::default()),
-                // );
+                let collider = Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh);
 
                 previous_connection_points_world[0] =
                     spawn_transform.transform_point(next_connection_points_local[0]);
@@ -289,13 +273,13 @@ fn generate_track(
                         ..default()
                     },
                     GeneratedTrackSegment,
-                    // Wireframe,
+                    Wireframe,
                 ));
 
-                another_builder.insert(collider);
-                // if let Some(collider) = collider {
-                //     another_builder.insert(collider);
-                // }
+                // another_builder.insert(collider);
+                if let Some(collider) = collider {
+                    another_builder.insert(collider);
+                }
 
                 previous_pos = position;
             }
@@ -319,264 +303,4 @@ fn default_connection_points(position: Vec3) -> [Vec3; 4] {
 
     // transform.transform_point(point)
     next_connection_points
-}
-
-fn generate_segment_mesh(
-    length: f32,
-    connection_points: [Vec3; 4],
-    rot: bool,
-) -> (Mesh, Collider, [Vec3; 4]) {
-    let half_size = Vec3::new(HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, length / 2.0);
-    let min = -half_size;
-    let max = half_size;
-
-    let next_connection_points = [
-        Vec3::new(min.x, max.y, max.z),
-        Vec3::new(max.x, max.y, max.z),
-        Vec3::new(max.x, min.y, max.z),
-        Vec3::new(min.x, min.y, max.z),
-    ];
-
-    let front_top_left = [max.x, max.y, max.z];
-    let front_bottom_left = [max.x, min.y, max.z];
-    let front_top_right = [min.x, max.y, max.z];
-    let front_bottom_right = [min.x, min.y, max.z];
-
-    let back_top_left = [max.x, max.y, min.z];
-    let back_bottom_left = [max.x, min.y, min.z];
-    let back_top_right = [min.x, max.y, min.z];
-    let back_bottom_right = [min.x, min.y, min.z];
-
-    // Suppose Y-up right hand, and camera look from +Z to -Z
-    let vertices = &[
-        // Front
-        ([min.x, min.y, max.z], [0.0, 0.0, 1.0], [0.0, 0.0]),
-        ([max.x, min.y, max.z], [0.0, 0.0, 1.0], [1.0, 0.0]),
-        ([max.x, max.y, max.z], [0.0, 0.0, 1.0], [1.0, 1.0]),
-        ([min.x, max.y, max.z], [0.0, 0.0, 1.0], [0.0, 1.0]),
-        //
-        // (connection_points[3].to_array(), [0.0, 0.0, 1.0], [0.0, 0.0]),
-        // (connection_points[2].to_array(), [0.0, 0.0, 1.0], [1.0, 0.0]),
-        // (connection_points[1].to_array(), [0.0, 0.0, 1.0], [1.0, 1.0]),
-        // (connection_points[0].to_array(), [0.0, 0.0, 1.0], [0.0, 1.0]),
-        // Back
-        // ([min.x, max.y, min.z], [0.0, 0.0, -1.0], [1.0, 0.0]),
-        // ([max.x, max.y, min.z], [0.0, 0.0, -1.0], [0.0, 0.0]),
-        // ([max.x, min.y, min.z], [0.0, 0.0, -1.0], [0.0, 1.0]),
-        // ([min.x, min.y, min.z], [0.0, 0.0, -1.0], [1.0, 1.0]),
-        (
-            connection_points[0].to_array(),
-            [0.0, 0.0, -1.0],
-            [1.0, 0.0],
-        ),
-        (
-            connection_points[1].to_array(),
-            [0.0, 0.0, -1.0],
-            [0.0, 0.0],
-        ),
-        (
-            connection_points[2].to_array(),
-            [0.0, 0.0, -1.0],
-            [0.0, 1.0],
-        ),
-        (
-            connection_points[3].to_array(),
-            [0.0, 0.0, -1.0],
-            [1.0, 1.0],
-        ),
-        // Right
-        (connection_points[2].to_array(), [1.0, 0.0, 0.0], [0.0, 0.0]),
-        (connection_points[1].to_array(), [1.0, 0.0, 0.0], [1.0, 0.0]),
-        ([max.x, max.y, max.z], [1.0, 0.0, 0.0], [1.0, 1.0]),
-        ([max.x, min.y, max.z], [1.0, 0.0, 0.0], [0.0, 1.0]),
-        // Left
-        ([min.x, min.y, max.z], [-1.0, 0.0, 0.0], [1.0, 0.0]),
-        ([min.x, max.y, max.z], [-1.0, 0.0, 0.0], [0.0, 0.0]),
-        (
-            connection_points[0].to_array(),
-            [-1.0, 0.0, 0.0],
-            [0.0, 1.0],
-        ),
-        (
-            connection_points[3].to_array(),
-            [-1.0, 0.0, 0.0],
-            [1.0, 1.0],
-        ),
-        // Top
-        (connection_points[1].to_array(), [0.0, 1.0, 0.0], [1.0, 0.0]),
-        (connection_points[0].to_array(), [0.0, 1.0, 0.0], [0.0, 0.0]),
-        ([min.x, max.y, max.z], [0.0, 1.0, 0.0], [0.0, 1.0]),
-        ([max.x, max.y, max.z], [0.0, 1.0, 0.0], [1.0, 1.0]),
-        // Bottom
-        ([max.x, min.y, max.z], [0.0, -1.0, 0.0], [0.0, 0.0]),
-        ([min.x, min.y, max.z], [0.0, -1.0, 0.0], [1.0, 0.0]),
-        (
-            connection_points[3].to_array(),
-            [0.0, -1.0, 0.0],
-            [1.0, 1.0],
-        ),
-        (
-            connection_points[2].to_array(),
-            [0.0, -1.0, 0.0],
-            [0.0, 1.0],
-        ),
-    ];
-
-    let positions: Vec<_> = vertices.iter().map(|(p, _, _)| *p).collect();
-    let normals: Vec<_> = vertices.iter().map(|(_, n, _)| *n).collect();
-    let uvs: Vec<_> = vertices.iter().map(|(_, _, uv)| *uv).collect();
-
-    let indices = if rot {
-        Indices::U32(vec![
-            0, 1, 2, 2, 3, 0, // front
-            4, 5, 6, 6, 7, 4, // back
-            8, 9, 10, 10, 11, 8, // right
-            12, 13, 14, 14, 15, 12, // left
-            16, 17, 18, 18, 19, 16, // top
-            // 17, 18, 19, 19, 16, 17, // top
-            // 20, 21, 22, 22, 23, 20, // bottom
-            21, 22, 23, 23, 20, 21, // bottom
-        ])
-    } else {
-        Indices::U32(vec![
-            0, 1, 2, 2, 3, 0, // front
-            4, 5, 6, 6, 7, 4, // back
-            8, 9, 10, 10, 11, 8, // right
-            12, 13, 14, 14, 15, 12, // left
-            // 16, 17, 18, 18, 19, 16, // top
-            17, 18, 19, 19, 16, 17, // top
-            // 20, 21, 22, 22, 23, 20, // bottom
-            21, 22, 23, 23, 20, 21, // bottom
-        ])
-    };
-
-    // let collider_a_indices = [
-    //     16, 17, 18, // top
-
-    // ];
-
-    // Collider::convex_mesh
-
-    let collider = Collider::compound(vec![
-        (
-            // Top
-            Vect::ZERO,
-            Rot::IDENTITY,
-            if rot {
-                Collider::triangle(
-                    positions[16].into(),
-                    positions[17].into(),
-                    positions[18].into(),
-                    // positions[17].into(),
-                    // positions[18].into(),
-                    // positions[19].into(),
-                )
-            } else {
-                Collider::triangle(
-                    // positions[16].into(),
-                    // positions[17].into(),
-                    // positions[18].into(),
-                    positions[17].into(),
-                    positions[18].into(),
-                    positions[19].into(),
-                )
-            },
-        ),
-        (
-            // Top
-            Vect::ZERO,
-            Rot::IDENTITY,
-            if rot {
-                Collider::triangle(
-                    positions[18].into(),
-                    positions[19].into(),
-                    positions[16].into(),
-                    // positions[19].into(),
-                    // positions[16].into(),
-                    // positions[17].into(),
-                )
-            } else {
-                Collider::triangle(
-                    // positions[18].into(),
-                    // positions[19].into(),
-                    // positions[16].into(),
-                    positions[19].into(),
-                    positions[16].into(),
-                    positions[17].into(),
-                )
-            },
-        ),
-        // (
-        //     // Left
-        //     Vect::ZERO,
-        //     Rot::IDENTITY,
-        //     Collider::triangle(
-        //         positions[12].into(),
-        //         positions[13].into(),
-        //         positions[14].into(),
-        //     ),
-        // ),
-        // (
-        //     // Left
-        //     Vect::ZERO,
-        //     Rot::IDENTITY,
-        //     Collider::triangle(
-        //         positions[14].into(),
-        //         positions[15].into(),
-        //         positions[12].into(),
-        //     ),
-        // ),
-        // (
-        //     // Back
-        //     Vect::ZERO,
-        //     Rot::IDENTITY,
-        //     Collider::triangle(
-        //         positions[4].into(),
-        //         positions[5].into(),
-        //         positions[6].into(),
-        //     ),
-        // ),
-        // (
-        //     // Back
-        //     Vect::ZERO,
-        //     Rot::IDENTITY,
-        //     Collider::triangle(
-        //         positions[6].into(),
-        //         positions[7].into(),
-        //         positions[4].into(),
-        //     ),
-        // ),
-        // (
-        //     // half-cross
-        //     Vect::ZERO,
-        //     Rot::IDENTITY,
-        //     Collider::triangle(
-        //         positions[12].into(),
-        //         positions[13].into(),
-        //         positions[17].into(),
-        //     ),
-        // ),
-    ]);
-
-    (
-        Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::default(),
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-        .with_inserted_indices(indices),
-        collider,
-        next_connection_points,
-    )
-}
-
-fn toggle_seam(actions: Res<Actions>, mut seam: ResMut<RotatedSeam>) {
-    if !actions.toggle_seam || !actions.is_changed() {
-        return;
-    }
-
-    info!("Toggled seam {seam:?}");
-    seam.0 = !seam.0;
 }

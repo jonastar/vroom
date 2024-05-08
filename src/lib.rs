@@ -14,6 +14,7 @@ mod raycast_vehicle_controller;
 mod reset_transform;
 mod scene;
 mod speedometer;
+mod track_mesh;
 mod ui_util;
 
 use std::time::Duration;
