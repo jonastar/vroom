@@ -163,7 +163,7 @@ pub fn camera_look_at<T: Component>(
 
         let mut back = target.back();
         back.y = 0.0;
-        let target_pos = (target.translation() + (back * 10.0)) + Vec3::new(0.0, 3.0, 0.0);
+        let target_pos = (target.translation() + (back * 10.0)) + Vec3::new(5.0, 3.0, 0.0);
         let new_pos = camera
             .translation
             .lerp(target_pos, time.delta_seconds() * 20.0);

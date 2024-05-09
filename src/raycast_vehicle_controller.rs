@@ -11,6 +11,7 @@ use bevy_rapier3d::pipeline::QueryFilter;
 use bevy_rapier3d::plugin::{PhysicsSet, RapierContext};
 use bevy_rapier3d::rapier::dynamics::{RigidBody, RigidBodyHandle};
 use bevy_rapier3d::rapier::math::Real;
+use transform_gizmo_bevy::gizmo;
 
 pub struct RaycastVehiclePlugin;
 
@@ -19,9 +20,10 @@ impl Plugin for RaycastVehiclePlugin {
         app.register_type::<DynamicRayCastVehicleController>()
             .register_type::<Wheel>()
             .register_type::<WheelTuning>()
+            .add_systems(Update, debug_wheels)
             .add_systems(
                 FixedUpdate,
-                (update_vehicles, update_wheel_visuals, debug_wheels)
+                (update_vehicles, update_wheel_visuals)
                     .chain()
                     .after(PhysicsSet::Writeback),
             );
@@ -288,6 +290,22 @@ impl Wheel {
     pub fn axle(&self) -> Vec3 {
         self.wheel_axle_ws
     }
+
+    pub fn suspension_impulse(&self, dt: f32) -> Vec3 {
+        let mut suspension_force = self.wheel_suspension_force;
+
+        if suspension_force > self.max_suspension_force {
+            suspension_force = self.max_suspension_force;
+        }
+        // if suspension_force < 0.0 {
+        //     suspension_force = 0.0;
+        // }
+
+        // gizmos.
+
+        let impulse = self.raycast_info.contact_normal_ws * suspension_force * dt;
+        impulse
+    }
 }
 
 /// Information about suspension and the ground obtained from the ray-casting
@@ -403,7 +421,7 @@ impl DynamicRayCastVehicleController {
         wheel.raycast_info.ground_object = None;
 
         if let Some((entity_hit, mut hit)) = hit {
-            if hit.toi == 0.0 {
+            if hit.time_of_impact == 0.0 {
                 // let collider = &colliders[collider_hit];
                 // hit.
                 let (collider, coll_trans) = colliders.get(entity_hit).unwrap();
@@ -435,7 +453,7 @@ impl DynamicRayCastVehicleController {
             wheel.raycast_info.is_in_contact = true;
             wheel.raycast_info.ground_object = Some(entity_hit);
 
-            let hit_distance = hit.toi * raylen;
+            let hit_distance = hit.time_of_impact * raylen;
             wheel.raycast_info.suspension_length = hit_distance - wheel.radius;
 
             // clamp on max suspension travel
@@ -925,8 +943,8 @@ impl DynamicRayCastVehicleController {
                 wheel.skid_info = 1.0;
 
                 if ground_object.is_some() {
-                    // let max_imp = wheel.wheel_suspension_force * dt * wheel.friction_slip;
-                    let max_imp = 500.0 * dt * wheel.friction_slip;
+                    let max_imp = wheel.wheel_suspension_force * dt * wheel.friction_slip;
+                    // let max_imp = 500.0 * dt * wheel.friction_slip;
                     let max_imp_side = max_imp;
                     let max_imp_squared = max_imp * max_imp_side;
                     assert!(max_imp_squared >= 0.0);
@@ -963,7 +981,7 @@ impl DynamicRayCastVehicleController {
                 let mut wheel = wheels.get_mut(*wheel_e).unwrap();
                 if wheel.side_impulse != 0.0 {
                     if wheel.skid_info < 1.0 {
-                        // wheel.forward_impulse *= wheel.skid_info;
+                        wheel.forward_impulse *= wheel.skid_info;
                         let delta = wheel.side_impulse - (wheel.side_impulse * wheel.skid_info);
                         wheel.side_impulse -= delta / 1.2;
                     }
@@ -1157,6 +1175,7 @@ pub fn update_vehicles(
     mut wheels: Query<&mut Wheel>,
     colliders: Query<(&Collider, &Transform)>,
     collider_handles: Query<&RapierColliderHandle>,
+    mut gizmos: Gizmos,
 ) {
     for (
         chassis_entity,
@@ -1204,16 +1223,10 @@ pub fn update_vehicles(
             }
 
             // apply suspension force
-            let mut suspension_force = wheel.wheel_suspension_force;
 
-            if suspension_force > wheel.max_suspension_force {
-                suspension_force = wheel.max_suspension_force;
-            }
-
-            let impulse =
-                wheel.raycast_info.contact_normal_ws * suspension_force * time.delta_seconds();
+            let suspension_impulse = wheel.suspension_impulse(time.delta_seconds());
             *external_impulse += ExternalImpulse::at_point(
-                impulse,
+                suspension_impulse,
                 wheel.raycast_info.contact_point_ws,
                 chassis_center_of_mass,
             );
@@ -1380,6 +1393,13 @@ fn debug_wheels(wheels: Query<&Wheel>, mut gizmos: Gizmos) {
             wheel.center,
             wheel.center + (wheel.side_impulse * wheel.axle),
             Color::ORANGE,
+        );
+
+        let suspension_impulse = wheel.suspension_impulse(0.01);
+        gizmos.arrow(
+            wheel.raycast_info.contact_point_ws,
+            wheel.raycast_info.contact_point_ws + suspension_impulse,
+            Color::CYAN,
         );
     }
 }

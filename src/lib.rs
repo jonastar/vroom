@@ -16,6 +16,7 @@ pub mod setup;
 mod speedometer;
 mod track_mesh;
 mod ui_util;
+mod walker;
 
 use std::time::Duration;
 
@@ -64,7 +65,7 @@ enum GameState {
 pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        let mut physics_config = RapierConfiguration::default();
+        let mut physics_config = RapierConfiguration::new(1.0);
         physics_config.timestep_mode = TimestepMode::Fixed {
             dt: 1.0 / 60.0,
             substeps: 1,
@@ -94,6 +95,9 @@ impl Plugin for GamePlugin {
                 RaycastVehiclePlugin,
                 editor::EditorPlugin,
                 editor_ui::EditorUiPlugin,
+                walker::SteppingPlugin::default()
+                    .at(Val::Px(10.0), Val::Px(100.0))
+                    .add_schedule(FixedUpdate),
             ))
             .add_plugins((map_file::MapFilePlugin, map::MapPlugin))
             .insert_resource(gizmo_options)
@@ -101,7 +105,7 @@ impl Plugin for GamePlugin {
                 bevy_mod_picking::DefaultPickingPlugins,
                 TransformGizmoPlugin,
                 DefaultEditorCamPlugins,
-                EditorPlugin::default(),
+                // EditorPlugin::default(),
             ));
 
         #[cfg(debug_assertions)]

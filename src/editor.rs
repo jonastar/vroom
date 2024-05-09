@@ -32,6 +32,7 @@ impl Plugin for EditorPlugin {
         app.init_state::<EditorState>()
             .add_systems(OnEnter(GameState::Editor), spawn_editor)
             .add_systems(OnEnter(EditorState::Testing), try_map)
+            .add_systems(OnExit(EditorState::Testing), stop_try_map)
             .add_systems(
                 Update,
                 disable_camera_movement_on_gizmo
@@ -45,7 +46,12 @@ impl Plugin for EditorPlugin {
             .add_systems(Update, (spawn_segment_handles, build_segment_curves))
             .add_systems(
                 Update,
-                (check_try_map, update_extends_segment_buttons).after(build_segment_curves),
+                (
+                    check_try_map,
+                    check_exit_try_map.run_if(in_state(EditorState::Testing)),
+                    update_extends_segment_buttons,
+                )
+                    .after(build_segment_curves),
             )
             .add_systems(
                 FixedUpdate,
@@ -76,7 +82,7 @@ fn spawn_editor(
             last_anchor_depth: 2.0,
             ..Default::default()
         },
-        IsDefaultUiCamera,
+        // IsDefaultUiCamera,
     ));
 
     commands.spawn(DirectionalLightBundle {
@@ -261,6 +267,15 @@ fn check_try_map(actions: Res<Actions>, mut next_state: ResMut<NextState<EditorS
     next_state.set(EditorState::Testing);
 }
 
+fn check_exit_try_map(actions: Res<Actions>, mut next_state: ResMut<NextState<EditorState>>) {
+    if !actions.escape {
+        return;
+    }
+
+    info!("Setting to editor");
+    next_state.set(EditorState::Editor);
+}
+
 fn try_map(
     mut commands: Commands,
     query: Query<&Transform, With<StartPoint>>,
@@ -276,6 +291,12 @@ fn try_map(
         &mut meshes,
         &mut materials,
     );
+}
+
+fn stop_try_map(mut commands: Commands, existing_cars: Query<Entity, With<CarBody>>) {
+    for existing in &existing_cars {
+        commands.entity(existing).despawn_recursive();
+    }
 }
 
 #[derive(Component)]
