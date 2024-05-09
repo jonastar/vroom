@@ -260,6 +260,7 @@ fn spawn_wheel(
             ..Default::default()
         },
         Collider::cuboid(0.1, 0.15, 0.1),
+        ColliderMassProperties::Density(50.0),
     ));
 
     let mut builder = car_parent.spawn((
