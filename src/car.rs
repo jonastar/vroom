@@ -252,14 +252,14 @@ fn spawn_wheel(
                 position
                     + Vec3 {
                         x: 0.0,
-                        y: -0.1,
+                        y: 0.0,
                         z: 0.0,
                     },
             ),
             // .with_rotation(wheel_start_rot),
             ..Default::default()
         },
-        Collider::cuboid(0.1, 0.15, 0.1),
+        Collider::cuboid(0.1, 0.1, 0.1),
         ColliderMassProperties::Density(50.0),
     ));
 
