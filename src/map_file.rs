@@ -23,6 +23,8 @@ pub struct MapFile {
     pub name: String,
     pub tracks: Vec<SavedTrack>,
     pub start_point: Vec3,
+    #[serde(default)]
+    pub start_rot: Quat,
 }
 
 impl Default for MapFile {
@@ -31,6 +33,7 @@ impl Default for MapFile {
             name: "unnamed".to_owned(),
             tracks: Default::default(),
             start_point: Vec3::ZERO,
+            start_rot: Quat::IDENTITY,
         }
     }
 }
@@ -58,14 +61,14 @@ pub struct PrepareSaveMap;
 #[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LoadMap;
 
-pub struct LoadMapFileCommand {
+pub struct LoadMapFileHandleCommand {
     pub handle: FileHandle,
 }
 
 #[derive(Component)]
 struct LoadMapFileTask(Task<Vec<u8>>);
 
-impl Command for LoadMapFileCommand {
+impl Command for LoadMapFileHandleCommand {
     fn apply(self, world: &mut bevy::prelude::World) {
         let tasks = IoTaskPool::get();
         let task = tasks.spawn(async move { self.handle.read().await });
@@ -86,7 +89,7 @@ fn poll_load_task(mut commands: Commands, mut query: Query<(Entity, &mut LoadMap
     }
 }
 
-struct LoadMapDataCommand {
+pub struct LoadMapDataCommand {
     pub data: Vec<u8>,
 }
 

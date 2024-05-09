@@ -11,8 +11,8 @@ mod map_file;
 mod menu;
 mod player;
 mod raycast_vehicle_controller;
-mod reset_transform;
 mod scene;
+pub mod setup;
 mod speedometer;
 mod track_mesh;
 mod ui_util;
@@ -36,7 +36,6 @@ use bevy_rapier3d::{
 };
 use car::CarPlugin;
 use raycast_vehicle_controller::RaycastVehiclePlugin;
-use reset_transform::ResetPlugin;
 use scene::ScenePlugin;
 use speedometer::SpeedometerPlugin;
 use transform_gizmo_bevy::{EnumSet, GizmoMode, GizmoOptions, TransformGizmoPlugin};
@@ -49,8 +48,13 @@ enum GameState {
     // During the loading State the LoadingPlugin will load our assets
     #[default]
     Loading,
+
+    // Handles starting up the game, this will either launch into menu and so on depending on launch options
+    Setup,
+
     // During this State the actual game logic is executed
     Playing,
+
     // Here the menu is drawn and waiting for player interaction
     Menu,
 
@@ -87,7 +91,6 @@ impl Plugin for GamePlugin {
                 ScenePlugin,
                 CarPlugin,
                 SpeedometerPlugin,
-                ResetPlugin,
                 RaycastVehiclePlugin,
                 editor::EditorPlugin,
                 editor_ui::EditorUiPlugin,

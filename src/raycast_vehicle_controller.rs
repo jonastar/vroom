@@ -937,11 +937,11 @@ impl DynamicRayCastVehicleController {
                     let y = wheel.side_impulse * side_factor;
 
                     let impulse_squared = x * x + y * y;
-                    dbg!(
-                        impulse_squared,
-                        max_imp_squared,
-                        wheel.wheel_suspension_force
-                    );
+                    // dbg!(
+                    //     impulse_squared,
+                    //     max_imp_squared,
+                    //     wheel.wheel_suspension_force
+                    // );
 
                     // TODO: this seems unreliable!
                     if impulse_squared > max_imp_squared {
@@ -951,12 +951,12 @@ impl DynamicRayCastVehicleController {
                         factors.push(factor);
                         wheel.skid_info *= factor;
                     } else {
-                        dbg!("Not higher!");
+                        // dbg!("Not higher!");
                     }
                 }
             }
         }
-        dbg!(&factors);
+        // dbg!(&factors);
 
         if sliding {
             for wheel_e in &wheel_entities {

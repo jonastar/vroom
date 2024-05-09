@@ -1,9 +1,7 @@
-use std::cmp;
-
 use bevy::{gltf::Gltf, prelude::*};
 use bevy_rapier3d::prelude::*;
 
-use crate::{loading::TextureAssets, GameState};
+use crate::{car::respawn_car_on_reset_action, loading::TextureAssets, GameState};
 
 pub struct ScenePlugin;
 
@@ -15,7 +13,11 @@ pub struct Level;
 impl Plugin for ScenePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::Playing), spawn_scene)
-            .add_systems(OnExit(GameState::Playing), despawn_scene);
+            .add_systems(OnExit(GameState::Playing), despawn_scene)
+            .add_systems(
+                Update,
+                respawn_car_on_reset_action.run_if(in_state(GameState::Playing)),
+            );
     }
 }
 
@@ -30,6 +32,14 @@ fn spawn_scene(
     textures: Res<TextureAssets>,
     mut scenes: ResMut<Assets<Scene>>,
 ) {
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(15.0, 5.0, 15.0).looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        },
+        IsDefaultUiCamera,
+    ));
+
     let level = &gltf_assets.get(&textures.level).unwrap().scenes[0];
     let scene = scenes.get_mut(level).unwrap();
     let colliders = bevy_gltf_collider::get_scene_colliders(&mut meshes, &mut scene.world).unwrap();
@@ -52,28 +62,6 @@ fn spawn_scene(
                 ));
             }
         });
-
-    // // plane
-    // commands.spawn((
-    //     PbrBundle {
-    //         // mesh: meshes.add(Plane3d::default().mesh().size(20., 20.)),
-    //         mesh: meshes.add(Cuboid::new(100.0, 0.5, 100.0)),
-    //         material: materials.add(Color::rgb(0.5, 0.2, 0.1)),
-    //         transform: Transform::from_translation(Vec3 {
-    //             x: 0.0,
-    //             y: -0.25,
-    //             z: 0.0,
-    //         }),
-    //         ..default()
-    //     },
-    //     Ground,
-    //     Collider::cuboid(50.0, 0.25, 50.0),
-    //     RigidBody::Fixed,
-    //     Friction {
-    //         coefficient: 1.0,
-    //         combine_rule: CoefficientCombineRule::Average,
-    //     },
-    // ));
 
     // // light
     commands.spawn(DirectionalLightBundle {
@@ -123,91 +111,6 @@ fn spawn_scene(
         &mut meshes,
         &mut materials,
     );
-
-    // spawn_box(
-    //     Vec3 {
-    //         x: 10.0,
-    //         y: 0.5,
-    //         z: 3.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
-
-    // spawn_box(
-    //     Vec3 {
-    //         x: 5.0,
-    //         y: 0.5,
-    //         z: 8.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
-
-    // spawn_box(
-    //     Vec3 {
-    //         x: -5.0,
-    //         y: 0.5,
-    //         z: -8.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
-
-    // spawn_box(
-    //     Vec3 {
-    //         x: -2.0,
-    //         y: 0.5,
-    //         z: -2.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
-
-    // spawn_ramp(
-    //     Vec3 {
-    //         x: -3.0,
-    //         y: 0.0,
-    //         z: -3.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
-    // spawn_ramp(
-    //     Vec3 {
-    //         x: -4.0,
-    //         y: 0.0,
-    //         z: -3.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
-    // spawn_box(
-    //     Vec3 {
-    //         x: -3.0,
-    //         y: 0.0,
-    //         z: -4.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
-    // spawn_box(
-    //     Vec3 {
-    //         x: -4.0,
-    //         y: 0.0,
-    //         z: -4.0,
-    //     },
-    //     &mut commands,
-    //     &mut meshes,
-    //     &mut materials,
-    // );
 }
 
 fn spawn_box(

@@ -42,6 +42,7 @@ fn setup_menu(mut commands: Commands, textures: Res<TextureAssets>) {
             ..default()
         },
         IsDefaultUiCamera,
+        Menu,
     ));
 
     commands

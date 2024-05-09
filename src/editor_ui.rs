@@ -1,5 +1,5 @@
 use crate::map::Track;
-use crate::map_file::{LoadMapFileCommand, SaveMapCommand};
+use crate::map_file::{LoadMapFileHandleCommand, SaveMapCommand};
 use crate::{ui_util::button_clicked_eq_cond, GameState};
 use bevy::prelude::*;
 use bevy::tasks::{futures_lite::future, AsyncComputeTaskPool, Task};
@@ -257,7 +257,7 @@ fn poll_file_dialog(mut commands: Commands, dialog: Option<ResMut<FileDialogInst
         if let Some(handle) = result {
             info!("Got handle {}", handle.file_name());
             match dialog.kind {
-                FileDialogKind::Load => commands.add(LoadMapFileCommand { handle }),
+                FileDialogKind::Load => commands.add(LoadMapFileHandleCommand { handle }),
                 FileDialogKind::Save => commands.add(SaveMapCommand { handle }),
             }
         }

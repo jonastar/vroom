@@ -2,6 +2,7 @@ use bevy::{math::cubic_splines::CubicCurve, pbr::wireframe::Wireframe, prelude::
 use bevy_rapier3d::geometry::{Collider, ComputedColliderShape, VHACDParameters};
 
 use crate::{
+    editor::StartPoint,
     map_file::{LoadMap, MapFile, PrepareSaveMap, SavedTrack},
     track_mesh::{generate_segment_mesh_new, MeshGeneratorBuffers, RotatedSeam},
 };
@@ -11,8 +12,8 @@ pub struct MapPlugin;
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(RotatedSeam(false))
-            .add_systems(LoadMap, load_tracks)
-            .add_systems(PrepareSaveMap, save_tracks)
+            .add_systems(LoadMap, (load_tracks, load_start_point))
+            .add_systems(PrepareSaveMap, (save_tracks, save_start_point))
             .add_systems(Update, (generate_tracks, visualize_track_segment_splines));
     }
 }
@@ -48,9 +49,42 @@ fn load_tracks(mut commands: Commands, file: Res<MapFile>) {
     }
 }
 
+fn load_start_point(
+    mut commands: Commands,
+    file: Res<MapFile>,
+    mut start_points: Query<&mut Transform, With<StartPoint>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Ok(mut start_transform) = start_points.get_single_mut() else {
+        commands.spawn((
+            PbrBundle {
+                mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+                material: materials.add(Color::rgb(0.2, 0.3, 0.1)),
+                transform: Transform::from_translation(file.start_point)
+                    .with_rotation(file.start_rot),
+                ..default()
+            },
+            StartPoint,
+        ));
+        return;
+    };
+
+    start_transform.translation = file.start_point;
+    start_transform.rotation = file.start_rot;
+}
+
 fn save_tracks(mut file: ResMut<MapFile>, tracks: Query<&Track>) {
     for track in &tracks {
         file.tracks.push(track.into());
+    }
+}
+
+fn save_start_point(mut file: ResMut<MapFile>, start_points: Query<&Transform, With<StartPoint>>) {
+    for t in &start_points {
+        file.start_point = t.translation;
+        file.start_rot = t.rotation;
+        // file.tracks.push(track.into());
     }
 }
 

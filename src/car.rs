@@ -1,7 +1,7 @@
 use crate::{
     actions::Actions,
+    editor::StartPoint,
     raycast_vehicle_controller::{DynamicRayCastVehicleController, WheelDesc, WheelTuning},
-    reset_transform::Resetable,
     scene::camera_look_at,
     GameState,
 };
@@ -60,11 +60,18 @@ fn spawn_car(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    spawn_car_helper(START_POSITION, &mut commands, &mut meshes, &mut materials);
+    spawn_car_helper(
+        START_POSITION,
+        Quat::IDENTITY,
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
 }
 
 pub fn spawn_car_helper(
     start_position: Vec3,
+    start_rotation: Quat,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -88,7 +95,8 @@ pub fn spawn_car_helper(
             PbrBundle {
                 mesh: meshes.add(Cuboid::new(1.25, 0.5, 2.0)),
                 material: materials.add(Color::rgb(0.2, 0.1, 0.3)),
-                transform: Transform::from_translation(start_position),
+                transform: Transform::from_translation(start_position)
+                    .with_rotation(start_rotation),
                 ..default()
             },
             CarBody,
@@ -97,7 +105,6 @@ pub fn spawn_car_helper(
             Velocity::zero(),
             ExternalImpulse::default(),
             ColliderMassProperties::Density(100.0),
-            Resetable,
             DynamicRayCastVehicleController::new(),
             Damping {
                 angular_damping: 1.0,
@@ -271,7 +278,6 @@ fn spawn_wheel(
         },
         wheel_kind,
         // Ccd::enabled(),
-        Resetable,
         crate::raycast_vehicle_controller::Wheel::new(WheelDesc::new(
             position,
             -Vec3::Y,
@@ -409,3 +415,29 @@ fn apply_wheel_tuning(
 //         }
 //     }
 // }
+
+pub fn respawn_car_on_reset_action(
+    actions: Res<Actions>,
+    mut commands: Commands,
+    query: Query<&Transform, With<StartPoint>>,
+    existing_cars: Query<Entity, With<CarBody>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if !actions.reset {
+        return;
+    }
+
+    for existing in &existing_cars {
+        commands.entity(existing).despawn_recursive();
+    }
+
+    let start = query.single();
+    spawn_car_helper(
+        start.translation,
+        start.rotation,
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
+}

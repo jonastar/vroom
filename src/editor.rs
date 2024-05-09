@@ -19,7 +19,7 @@ enum EditorState {
 
 use crate::{
     actions::Actions,
-    car::{spawn_car_helper, CarBody},
+    car::{respawn_car_on_reset_action, spawn_car_helper, CarBody},
     map::{points_to_bezier_segments, Track},
     scene::camera_look_at,
     GameState,
@@ -38,7 +38,10 @@ impl Plugin for EditorPlugin {
                     .run_if(in_state(GameState::Editor))
                     .before(default_camera_inputs),
             )
-            .add_systems(Update, reset.run_if(in_state(EditorState::Testing)))
+            .add_systems(
+                Update,
+                respawn_car_on_reset_action.run_if(in_state(EditorState::Testing)),
+            )
             .add_systems(Update, (spawn_segment_handles, build_segment_curves))
             .add_systems(
                 Update,
@@ -95,7 +98,7 @@ fn spawn_editor(
         PbrBundle {
             mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
             material: materials.add(Color::rgb(0.2, 0.3, 0.1)),
-            transform: Transform::IDENTITY,
+            transform: Transform::from_translation(Vec3::new(0.0, 2.0, 10.0)),
             ..default()
         },
         PickableBundle::default(),
@@ -108,10 +111,10 @@ fn spawn_editor(
             built_curve: None,
             bezier_segments: Vec::new(),
             points: vec![
-                (Vec3::new(5.0, 0.0, 0.0), Quat::IDENTITY),
-                (Vec3::new(10.0, 1.0, 0.0), Quat::IDENTITY),
-                (Vec3::new(15.0, 1.0, 0.0), Quat::IDENTITY),
-                (Vec3::new(20.0, 0.0, 0.0), Quat::IDENTITY),
+                (Vec3::new(0.0, 0.0, -30.0), Quat::IDENTITY),
+                (Vec3::new(0.0, 1.0, -20.0), Quat::IDENTITY),
+                (Vec3::new(0.0, 1.0, 30.0), Quat::IDENTITY),
+                (Vec3::new(0.0, 0.0, 40.0), Quat::IDENTITY),
             ],
         },
         SpatialBundle::default(),
@@ -265,27 +268,14 @@ fn try_map(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     info!("Spawned car");
-    let start = query.single().translation;
-    spawn_car_helper(start, &mut commands, &mut meshes, &mut materials);
-}
-fn reset(
-    actions: Res<Actions>,
-    mut commands: Commands,
-    query: Query<&Transform, With<StartPoint>>,
-    existing_cars: Query<Entity, With<CarBody>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    if !actions.reset {
-        return;
-    }
-
-    for existing in &existing_cars {
-        commands.entity(existing).despawn_recursive();
-    }
-
-    let start = query.single().translation;
-    spawn_car_helper(start, &mut commands, &mut meshes, &mut materials);
+    let start = query.single();
+    spawn_car_helper(
+        start.translation,
+        start.rotation,
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+    );
 }
 
 #[derive(Component)]

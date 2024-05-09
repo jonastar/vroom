@@ -9,11 +9,13 @@ use bevy::render::RenderPlugin;
 use bevy::window::PrimaryWindow;
 use bevy::winit::WinitWindows;
 use bevy::DefaultPlugins;
-use bevy_game::GamePlugin; // ToDo: Replace bevy_game with your new crate name.
+use bevy_game::setup::SetupPlugin;
+use bevy_game::{setup, GamePlugin}; // ToDo: Replace bevy_game with your new crate name.
 use std::io::Cursor;
 use winit::window::Icon;
 
 fn main() {
+    let setup_plugin = SetupPlugin::load();
     App::new()
         .insert_resource(Msaa::Off)
         .insert_resource(AssetMetaCheck::Never)
@@ -40,6 +42,7 @@ fn main() {
                     ..default()
                 }),
         )
+        .add_plugins(setup_plugin)
         // .add_plugins(WireframePlugin)
         .add_plugins(GamePlugin)
         .add_systems(Startup, set_window_icon)
