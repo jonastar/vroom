@@ -78,7 +78,7 @@ pub fn spawn_car_helper(
 ) {
     let tuning = WheelTuning {
         suspension_stiffness: 20.0,
-        suspension_compression: 10.0,
+        suspension_compression: 1.0,
         suspension_damping: 1.0,
         max_suspension_travel: 0.25,
         side_friction_stiffness: 1.0,
@@ -321,7 +321,7 @@ fn move_car_raycast(
             wheel.brake = 0.0;
         }
 
-        if !our_wheel.is_front() {
+        if our_wheel.is_front() {
             continue;
         }
 
@@ -355,7 +355,7 @@ fn turn_front_wheels(
     let turn_modifier = if speed < 7.0 {
         1.0
     } else {
-        1.0 / (speed / 7.0)
+        1.0 / (speed / 10.0)
     };
     let turn_modifier = turn_modifier.clamp(0.1, 1.0);
 

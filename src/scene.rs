@@ -42,7 +42,7 @@ fn spawn_scene(
 
     let level = &gltf_assets.get(&textures.level).unwrap().scenes[0];
     let scene = scenes.get_mut(level).unwrap();
-    let colliders = bevy_gltf_collider::get_scene_colliders(&mut meshes, &mut scene.world).unwrap();
+    let colliders = get_scene_colliders(&mut meshes, &mut scene.world);
     commands
         .spawn(SceneBundle {
             scene: level.clone(),
@@ -163,7 +163,8 @@ pub fn camera_look_at<T: Component>(
 
         let mut back = target.back();
         back.y = 0.0;
-        let target_pos = (target.translation() + (back * 10.0)) + Vec3::new(5.0, 3.0, 0.0);
+        // let target_pos = (target.translation() + (back * 10.0)) + Vec3::new(5.0, 3.0, 0.0);
+        let target_pos = (target.translation() + (back * 10.0)) + Vec3::new(0.0, 3.0, 0.0);
         let new_pos = camera
             .translation
             .lerp(target_pos, time.delta_seconds() * 20.0);
@@ -185,3 +186,61 @@ pub fn camera_look_at<T: Component>(
 //         .friction(1.0);
 //     colliders.insert(collider);
 // }
+
+/// Get all colliders from a scene.
+///
+/// It will search for all nodes with name starting with "collider" and will create a collider from the mesh.
+///
+/// NOTE: should be called only once per scene as it will remove the colliders meshes from it.
+pub fn get_scene_colliders(
+    meshes: &mut Assets<Mesh>,
+    world: &mut World,
+) -> Vec<(Collider, Transform)> {
+    let mut result = Vec::new();
+
+    let mut entities_to_despawn = Vec::new();
+    let mut meshes_q = world.query::<(Entity, &Name, Option<&Children>)>();
+    for (entity, entity_name, children) in meshes_q.iter(world) {
+        match process_mesh_collider(entity_name, children, world, meshes) {
+            None => {}
+            Some(collider) => {
+                let transform = *world.get::<Transform>(entity).unwrap();
+                result.push((collider, transform));
+                entities_to_despawn.push(entity);
+            }
+        }
+    }
+
+    result
+}
+
+pub(super) fn process_mesh_collider(
+    node_name: &str,
+    children: Option<&Children>,
+    world: &World,
+    meshes: &mut Assets<Mesh>,
+) -> Option<Collider> {
+    // if !node_name.starts_with(COLLIDER_MESH_NAME) {
+    //     return None;
+    // }
+
+    let children = if let Some(children) = children {
+        children
+    } else {
+        return None;
+    };
+
+    children.iter().find_map(|&child| {
+        if let Some(mesh) = world.get::<Handle<Mesh>>(child) {
+            let mesh = meshes.get(mesh).unwrap();
+
+            Some(Collider::from_bevy_mesh(
+                &mesh,
+                &ComputedColliderShape::TriMesh,
+            ))
+            .flatten()
+        } else {
+            None
+        }
+    })
+}

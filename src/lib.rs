@@ -105,7 +105,7 @@ impl Plugin for GamePlugin {
                 bevy_mod_picking::DefaultPickingPlugins,
                 TransformGizmoPlugin,
                 DefaultEditorCamPlugins,
-                // EditorPlugin::default(),
+                EditorPlugin::default(),
             ));
 
         #[cfg(debug_assertions)]
