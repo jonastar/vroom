@@ -486,7 +486,9 @@ impl DynamicRayCastVehicleController {
                 wheel.clipped_inv_contact_dot_suspension = 1.0 / 0.1;
             } else {
                 let inv = -1.0 / denominator;
-                wheel.suspension_relative_velocity = proj_vel * inv;
+                // TODO: verify this
+                // wheel.suspension_relative_velocity = proj_vel * inv;
+                wheel.suspension_relative_velocity = proj_vel;
                 wheel.clipped_inv_contact_dot_suspension = inv;
             }
         } else {
@@ -605,9 +607,9 @@ impl DynamicRayCastVehicleController {
                 let current_length = wheel.raycast_info.suspension_length;
                 let length_diff = rest_length - current_length;
 
-                force = wheel.suspension_stiffness
-                    * (length_diff * 2.0)
-                    * wheel.clipped_inv_contact_dot_suspension;
+                force = wheel.suspension_stiffness * (length_diff * 2.0);
+                // The harsher the angle the more suspension? this makes no sense to me
+                // * wheel.clipped_inv_contact_dot_suspension;
             }
 
             // Damper
@@ -624,6 +626,7 @@ impl DynamicRayCastVehicleController {
             }
 
             // RESULT
+            // wheel.wheel_suspension_force = (force * chassis_mass).max(0.0);
             wheel.wheel_suspension_force = (force * chassis_mass).max(0.0);
         } else {
             wheel.wheel_suspension_force = 0.0;

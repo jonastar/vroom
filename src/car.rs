@@ -93,14 +93,14 @@ pub fn spawn_car_helper(
             },
             // SpatialBundle::from_transform(Transform::from_translation(START_POSITION)),
             PbrBundle {
-                mesh: meshes.add(Cuboid::new(1.25, 0.5, 2.0)),
+                mesh: meshes.add(Cuboid::new(1.25, 0.5, 2.5)),
                 material: materials.add(Color::rgb(0.2, 0.1, 0.3)),
                 transform: Transform::from_translation(start_position)
                     .with_rotation(start_rotation),
                 ..default()
             },
             CarBody,
-            Collider::cuboid(0.625, 0.25, 1.0),
+            Collider::cuboid(0.625, 0.25, 1.25),
             RigidBody::Dynamic,
             Velocity::zero(),
             ExternalImpulse::default(),
