@@ -31,6 +31,7 @@ use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_editor_cam::DefaultEditorCamPlugins;
 use bevy_editor_pls::EditorPlugin;
+use bevy_egui::EguiPlugin;
 use bevy_rapier3d::{
     plugin::{NoUserData, RapierConfiguration, RapierPhysicsPlugin, TimestepMode},
     render::RapierDebugRenderPlugin,
@@ -95,6 +96,7 @@ impl Plugin for GamePlugin {
                 RaycastVehiclePlugin,
                 editor::EditorPlugin,
                 editor_ui::EditorUiPlugin,
+                EguiPlugin,
                 walker::SteppingPlugin::default()
                     .at(Val::Px(10.0), Val::Px(100.0))
                     .add_schedule(FixedUpdate),
@@ -105,7 +107,7 @@ impl Plugin for GamePlugin {
                 bevy_mod_picking::DefaultPickingPlugins,
                 TransformGizmoPlugin,
                 DefaultEditorCamPlugins,
-                EditorPlugin::default(),
+                // EditorPlugin::default(),
             ));
 
         #[cfg(debug_assertions)]

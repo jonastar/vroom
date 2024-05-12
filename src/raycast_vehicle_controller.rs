@@ -1,6 +1,9 @@
 //! A vehicle controller based on ray-casting, ported and modified from Bullet’s `btRaycastVehicle`.
 
+use std::collections::VecDeque;
+
 use bevy::prelude::*;
+use bevy_egui::{egui, EguiContexts};
 use bevy_rapier3d::dynamics::{
     ExternalImpulse, RapierRigidBodyHandle, ReadMassProperties, Sleeping, Velocity,
 };
@@ -11,6 +14,7 @@ use bevy_rapier3d::pipeline::QueryFilter;
 use bevy_rapier3d::plugin::{PhysicsSet, RapierContext};
 use bevy_rapier3d::rapier::dynamics::{RigidBody, RigidBodyHandle};
 use bevy_rapier3d::rapier::math::Real;
+use egui_plot::{CoordinatesFormatter, Corner, Legend, Line, Plot, PlotPoints};
 use transform_gizmo_bevy::gizmo;
 
 pub struct RaycastVehiclePlugin;
@@ -1369,42 +1373,131 @@ pub(crate) fn inv(val: Real) -> Real {
         1.0 / val
     }
 }
-fn debug_wheels(wheels: Query<&Wheel>, mut gizmos: Gizmos) {
-    for wheel in &wheels {
-        gizmos.line(
-            wheel.center,
-            wheel.center + wheel.wheel_axle_ws,
-            Color::PINK,
-        );
 
-        gizmos.line(
-            wheel.center,
-            wheel.center + wheel.wheel_direction_ws,
-            if wheel.raycast_info.ground_object.is_some() {
-                Color::GREEN
-            } else {
-                Color::RED
-            },
-        );
-        gizmos.line(wheel.center, wheel.center + wheel.forward_ws, Color::PURPLE);
-        gizmos.line(
-            wheel.center,
-            wheel.center + (wheel.forward_impulse * wheel.forward_ws),
-            Color::BLUE,
-        );
-        gizmos.line(
-            wheel.center,
-            wheel.center + (wheel.side_impulse * wheel.axle),
-            Color::ORANGE,
-        );
+#[derive(Default)]
+struct DebugWheelStates {
+    states: VecDeque<Vec<(Entity, Wheel)>>,
+}
 
-        let suspension_impulse = wheel.suspension_impulse(0.01);
-        gizmos.arrow(
-            wheel.raycast_info.contact_point_ws,
-            wheel.raycast_info.contact_point_ws + suspension_impulse,
-            Color::CYAN,
-        );
+fn debug_wheels(
+    wheels: Query<(Entity, &Wheel)>,
+    mut gizmos: Gizmos,
+    mut contexts: EguiContexts,
+    mut state_history: Local<DebugWheelStates>,
+) {
+    if wheels.is_empty() {
+        return;
     }
+
+    let mut this_frame = Vec::with_capacity(10);
+    for (entity, wheel) in &wheels {
+        this_frame.push((entity, wheel.clone()));
+    }
+
+    state_history.states.push_back(this_frame);
+    while state_history.states.len() > 1000 {
+        state_history.states.pop_front();
+    }
+
+    egui::Window::new("Wheels").show(contexts.ctx_mut(), |ui| {
+        let mut susp_lines: Vec<Line> = Vec::with_capacity(4);
+        let mut forward_lines: Vec<Line> = Vec::with_capacity(4);
+
+        for (entity, wheel) in &wheels {
+            gizmos.line(
+                wheel.center,
+                wheel.center + wheel.wheel_axle_ws,
+                Color::PINK,
+            );
+
+            gizmos.line(
+                wheel.center,
+                wheel.center + wheel.wheel_direction_ws,
+                if wheel.raycast_info.ground_object.is_some() {
+                    Color::GREEN
+                } else {
+                    Color::RED
+                },
+            );
+            gizmos.line(wheel.center, wheel.center + wheel.forward_ws, Color::PURPLE);
+            gizmos.line(
+                wheel.center,
+                wheel.center + (wheel.forward_impulse * wheel.forward_ws),
+                Color::BLUE,
+            );
+            gizmos.line(
+                wheel.center,
+                wheel.center + (wheel.side_impulse * wheel.axle),
+                Color::ORANGE,
+            );
+
+            let suspension_impulse = wheel.suspension_impulse(0.01);
+            gizmos.arrow(
+                wheel.raycast_info.contact_point_ws,
+                wheel.raycast_info.contact_point_ws + suspension_impulse,
+                Color::CYAN,
+            );
+
+            ui.vertical(|ui| {
+                ui.label(format!("entity: {entity:?}"));
+
+                let states = state_history
+                    .states
+                    .iter()
+                    .flat_map(|v| v.iter().filter_map(|w| (w.0 == entity).then_some(&w.1)));
+
+                let suspension_line = Line::new(PlotPoints::from_iter(
+                    states
+                        .clone()
+                        .enumerate()
+                        .map(|(i, v)| [i as f64, v.wheel_suspension_force as f64]),
+                ))
+                .name(format!("Susp {entity:?}"));
+
+                let forward_line = Line::new(PlotPoints::from_iter(
+                    states
+                        .clone()
+                        .enumerate()
+                        .map(|(i, v)| [i as f64, v.forward_impulse as f64]),
+                ))
+                .name(format!("Forward {entity:?}"));
+
+                susp_lines.push(suspension_line);
+                forward_lines.push(forward_line);
+            });
+            // ui.label("world");
+        }
+
+        ui.collapsing("Suspension", |ui| {
+            let plot = Plot::new("suspensions")
+                .legend(Legend::default())
+                // .y_axis_width(4)
+                .show_axes(true)
+                .show_grid(true)
+                .coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
+
+            plot.show(ui, |plot_ui| {
+                for line in susp_lines {
+                    plot_ui.line(line);
+                }
+            })
+        });
+
+        ui.collapsing("Forward impulse", |ui| {
+            let plot = Plot::new("forward_impulses")
+                .legend(Legend::default())
+                // .y_axis_width(4)
+                .show_axes(true)
+                .show_grid(true)
+                .coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
+
+            plot.show(ui, |plot_ui| {
+                for line in forward_lines {
+                    plot_ui.line(line);
+                }
+            })
+        });
+    });
 }
 
 fn update_wheel_visuals(time: Res<Time>, mut wheels: Query<(&Wheel, &mut Transform)>) {

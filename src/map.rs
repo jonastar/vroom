@@ -1,5 +1,5 @@
 use bevy::{math::cubic_splines::CubicCurve, pbr::wireframe::Wireframe, prelude::*};
-use bevy_rapier3d::geometry::{Collider, ComputedColliderShape, VHACDParameters};
+use bevy_rapier3d::geometry::{Collider, ComputedColliderShape, ContactSkin, VHACDParameters};
 
 use crate::{
     editor::StartPoint,

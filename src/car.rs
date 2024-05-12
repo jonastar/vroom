@@ -83,7 +83,7 @@ pub fn spawn_car_helper(
         max_suspension_travel: 0.25,
         side_friction_stiffness: 1.0,
         friction_slip: 1.5,
-        max_suspension_force: 6000.0,
+        max_suspension_force: 1000.0,
     };
 
     commands
@@ -100,11 +100,17 @@ pub fn spawn_car_helper(
                 ..default()
             },
             CarBody,
-            Collider::cuboid(0.625, 0.25, 1.25),
+            Collider::round_cuboid(0.525, 0.15, 1.15, 0.1),
             RigidBody::Dynamic,
             Velocity::zero(),
             ExternalImpulse::default(),
             ColliderMassProperties::Density(100.0),
+            AdditionalMassProperties::MassProperties(MassProperties {
+                local_center_of_mass: Vec3::new(0.0, -1.0, 0.0),
+                mass: 50.0,
+                principal_inertia_local_frame: Quat::IDENTITY,
+                principal_inertia: Vec3::ONE,
+            }),
             DynamicRayCastVehicleController::new(),
             Damping {
                 angular_damping: 1.0,
@@ -221,6 +227,12 @@ pub fn spawn_car_helper(
         });
 }
 
+// principal_inertia: Vec3(
+//     87.814095,
+//     104.11991,
+//     27.594929,
+// ),
+
 #[derive(Component, Clone)]
 enum Wheel {
     FrontRight,
@@ -325,7 +337,7 @@ fn move_car_raycast(
             continue;
         }
 
-        let engine_force = input.y * 700.0;
+        let engine_force = input.y * 1000.0;
 
         wheel.engine_force = engine_force;
     }
@@ -420,7 +432,7 @@ pub fn respawn_car_on_reset_action(
     actions: Res<Actions>,
     mut commands: Commands,
     query: Query<&Transform, With<StartPoint>>,
-    existing_cars: Query<Entity, With<CarBody>>,
+    mut existing_cars: Query<&mut Transform, (With<CarBody>, Without<StartPoint>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -428,11 +440,14 @@ pub fn respawn_car_on_reset_action(
         return;
     }
 
-    for existing in &existing_cars {
-        commands.entity(existing).despawn_recursive();
+    let start = query.single();
+    for mut existing in &mut existing_cars {
+        existing.translation = start.translation;
+        existing.rotation = start.rotation;
+        // commands.entity(existing).despawn_recursive();
+        return;
     }
 
-    let start = query.single();
     spawn_car_helper(
         start.translation,
         start.rotation,
