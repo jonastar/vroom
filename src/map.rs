@@ -1,10 +1,10 @@
 use bevy::{math::cubic_splines::CubicCurve, pbr::wireframe::Wireframe, prelude::*};
-use bevy_rapier3d::geometry::{Collider, ComputedColliderShape, ContactSkin, VHACDParameters};
+use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
 
 use crate::{
     editor::StartPoint,
     map_file::{LoadMap, MapFile, PrepareSaveMap, SavedTrack},
-    track_mesh::{generate_segment_mesh_new, MeshGeneratorBuffers, RotatedSeam},
+    track_mesh::{generate_track_mesh, RotatedSeam},
 };
 
 pub struct MapPlugin;
@@ -163,28 +163,28 @@ fn generate_tracks(
             generate_track(
                 &mut commands,
                 &boxes,
-                &mut gizmos,
                 &mut meshes,
                 &mut materials,
                 entity,
                 track,
                 children,
-                seam.0,
             );
+
+            track_gizmos(&mut gizmos, track);
         }
     } else {
         for (entity, track, children) in &changed_tracks {
             generate_track(
                 &mut commands,
                 &boxes,
-                &mut gizmos,
                 &mut meshes,
                 &mut materials,
                 entity,
                 track,
                 children,
-                seam.0,
             );
+
+            track_gizmos(&mut gizmos, track);
         }
     }
 }
@@ -192,14 +192,12 @@ fn generate_tracks(
 fn generate_track(
     commands: &mut Commands,
     boxes: &Query<Entity, With<GeneratedTrackSegment>>,
-    gizmos: &mut Gizmos,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
 
     entity: Entity,
     track: &Track,
     children: &Children,
-    seam: bool,
 ) {
     // Despawn existing graphics and colliders
     for child in children {
@@ -207,6 +205,35 @@ fn generate_track(
             commands.entity(*child).despawn_recursive();
         }
     }
+
+    commands.entity(entity).with_children(|builder| {
+        let mesh = generate_track_mesh(&track);
+        let Some(mesh) = mesh else {
+            dbg!("No mesh");
+            return;
+        };
+        let collider = Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh);
+
+        let mut another_builder = builder.spawn((
+            PbrBundle {
+                // mesh: meshes.add(Cuboid::new(1.0, 1.0, length)),
+                mesh: meshes.add(mesh),
+                material: materials.add(Color::rgb(0.0, 0.5, 0.3)),
+                transform: Transform::default(),
+                ..default()
+            },
+            GeneratedTrackSegment,
+            Wireframe,
+        ));
+
+        if let Some(collider) = collider {
+            another_builder.insert(collider);
+        }
+    });
+}
+
+fn track_gizmos(gizmos: &mut Gizmos, track: &Track) {
+    // Despawn existing graphics and colliders
 
     let Some(curve) = &track.built_curve else {
         return;
@@ -218,135 +245,32 @@ fn generate_track(
     let start_position = curve.position(0.0);
 
     let mut previous_pos = start_position;
-    let mut previous_connection_points_world = default_connection_points(previous_pos);
 
-    let mut mesh_gen_buf = MeshGeneratorBuffers::default();
+    for segment_index in 0..track.bezier_segments.len() {
+        let subdivisions = 100;
 
-    commands.entity(entity).with_children(|builder| {
-        for segment_index in 0..track.bezier_segments.len() {
-            let subdivisions = 40;
+        let start_rot = track.bezier_segments[segment_index][0].1;
+        let end_rot = track.bezier_segments[segment_index][3].1;
 
-            let start_rot = track.bezier_segments[segment_index][0].1;
-            let end_rot = track.bezier_segments[segment_index][3].1;
-
-            for sub_index in 0..subdivisions {
-                if segment_index == 0 && sub_index == 0 {
-                    continue;
-                }
-
-                let local_t = sub_index as f32 / subdivisions as f32;
-                let global_t = segment_index as f32 + local_t;
-                let position = curve.position(global_t);
-
-                let center = ((position - previous_pos) / 2.0) + previous_pos;
-
-                let length = position.distance(previous_pos);
-                let interpolated_rot = start_rot.lerp(end_rot, local_t);
-                gizmos.arrow(
-                    center,
-                    center + (interpolated_rot * Vec3::Y) * 10.0,
-                    Color::RED,
-                );
-                let spawn_transform = Transform::from_translation(center)
-                    .looking_at(previous_pos, interpolated_rot * Vec3::Y);
-
-                let inverted = spawn_transform.compute_affine().inverse();
-                let cur_connection_points_local = [
-                    inverted.transform_point(previous_connection_points_world[0]),
-                    inverted.transform_point(previous_connection_points_world[1]),
-                    inverted.transform_point(previous_connection_points_world[2]),
-                    inverted.transform_point(previous_connection_points_world[3]),
-                ];
-                gizmos.line(
-                    spawn_transform.translation,
-                    spawn_transform.transform_point(cur_connection_points_local[0]),
-                    Color::RED,
-                );
-                gizmos.line(
-                    spawn_transform.translation,
-                    spawn_transform.transform_point(cur_connection_points_local[1]),
-                    Color::GREEN,
-                );
-                gizmos.line(
-                    spawn_transform.translation,
-                    spawn_transform.transform_point(cur_connection_points_local[2]),
-                    Color::BLUE,
-                );
-                gizmos.line(
-                    spawn_transform.translation,
-                    spawn_transform.transform_point(cur_connection_points_local[3]),
-                    Color::YELLOW,
-                );
-
-                let generate_back = segment_index == track.bezier_segments.len() - 1
-                    && sub_index == subdivisions - 1;
-
-                let (mesh, next_connection_points_local) = generate_segment_mesh_new(
-                    &mut mesh_gen_buf,
-                    length,
-                    cur_connection_points_local,
-                    generate_back,
-                    segment_index == 0 && sub_index == 1,
-                );
-                mesh_gen_buf.clear();
-                // let (mesh, collider, next_connection_points_local) =
-                //     generate_segment_mesh(length, cur_connection_points_local);
-
-                // let collider = Collider::from_bevy_mesh(
-                //     &mesh,
-                //     &ComputedColliderShape::ConvexDecomposition(VHACDParameters {
-                //         ..Default::default()
-                //     }),
-                // );
-
-                let collider = Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh);
-
-                previous_connection_points_world[0] =
-                    spawn_transform.transform_point(next_connection_points_local[0]);
-                previous_connection_points_world[1] =
-                    spawn_transform.transform_point(next_connection_points_local[1]);
-                previous_connection_points_world[2] =
-                    spawn_transform.transform_point(next_connection_points_local[2]);
-                previous_connection_points_world[3] =
-                    spawn_transform.transform_point(next_connection_points_local[3]);
-
-                let mut another_builder = builder.spawn((
-                    PbrBundle {
-                        // mesh: meshes.add(Cuboid::new(1.0, 1.0, length)),
-                        mesh: meshes.add(mesh),
-                        material: materials.add(Color::rgb(0.0, 0.5, 0.3)),
-                        transform: spawn_transform,
-                        ..default()
-                    },
-                    GeneratedTrackSegment,
-                    Wireframe,
-                ));
-
-                // another_builder.insert(collider);
-                if let Some(collider) = collider {
-                    another_builder.insert(collider);
-                }
-
-                previous_pos = position;
+        for sub_index in 0..subdivisions {
+            if segment_index == 0 && sub_index == 0 {
+                continue;
             }
+
+            let local_t = sub_index as f32 / subdivisions as f32;
+            let global_t = segment_index as f32 + local_t;
+            let position = curve.position(global_t);
+
+            let center = ((position - previous_pos) / 2.0) + previous_pos;
+
+            let interpolated_rot = start_rot.lerp(end_rot, local_t);
+            gizmos.arrow(
+                center,
+                center + (interpolated_rot * Vec3::Y) * 10.0,
+                Color::RED,
+            );
+
+            previous_pos = position;
         }
-    });
-}
-
-const TRACK_WIDTH: f32 = 10.0;
-const HALF_TRACK_WIDTH: f32 = TRACK_WIDTH / 2.0;
-const TRACK_HEIGHT: f32 = 1.0;
-const HALF_TRACK_HEIGHT: f32 = TRACK_HEIGHT / 2.0;
-
-fn default_connection_points(position: Vec3) -> [Vec3; 4] {
-    let next_connection_points = [
-        Vec3::new(-HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, 0.0) + position,
-        Vec3::new(HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, 0.0) + position,
-        Vec3::new(HALF_TRACK_WIDTH, -HALF_TRACK_HEIGHT, 0.0) + position,
-        Vec3::new(-HALF_TRACK_WIDTH, -HALF_TRACK_HEIGHT, 0.0) + position,
-    ];
-    // let transform = Transform::IDENTITY;
-
-    // transform.transform_point(point)
-    next_connection_points
+    }
 }

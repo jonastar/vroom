@@ -1267,7 +1267,7 @@ pub fn update_vehicles(
 
         // let wheel_entities = children.iter().filter(|v| wheels.chil)
         // wheels.get_mut(entity)
-        let mut wheels_entities = children
+        let wheels_entities = children
             .iter()
             .filter_map(|v| wheels.contains(*v).then_some(*v))
             .collect::<Vec<_>>();
@@ -1379,9 +1379,50 @@ struct DebugWheelStates {
     states: VecDeque<Vec<(Entity, Wheel)>>,
 }
 
-fn debug_wheels(
+fn debug_wheels(wheels: Query<&Wheel>, mut gizmos: Gizmos) {
+    if wheels.is_empty() {
+        return;
+    }
+
+    for wheel in &wheels {
+        gizmos.line(
+            wheel.center,
+            wheel.center + wheel.wheel_axle_ws,
+            Color::PINK,
+        );
+
+        gizmos.line(
+            wheel.center,
+            wheel.center + wheel.wheel_direction_ws,
+            if wheel.raycast_info.ground_object.is_some() {
+                Color::GREEN
+            } else {
+                Color::RED
+            },
+        );
+        gizmos.line(wheel.center, wheel.center + wheel.forward_ws, Color::PURPLE);
+        gizmos.line(
+            wheel.center,
+            wheel.center + (wheel.forward_impulse * wheel.forward_ws),
+            Color::BLUE,
+        );
+        gizmos.line(
+            wheel.center,
+            wheel.center + (wheel.side_impulse * wheel.axle),
+            Color::ORANGE,
+        );
+
+        let suspension_impulse = wheel.suspension_impulse(0.01);
+        gizmos.arrow(
+            wheel.raycast_info.contact_point_ws,
+            wheel.raycast_info.contact_point_ws + suspension_impulse,
+            Color::CYAN,
+        );
+    }
+}
+
+fn plot_wheels(
     wheels: Query<(Entity, &Wheel)>,
-    mut gizmos: Gizmos,
     mut contexts: EguiContexts,
     mut state_history: Local<DebugWheelStates>,
 ) {
@@ -1402,70 +1443,41 @@ fn debug_wheels(
     egui::Window::new("Wheels").show(contexts.ctx_mut(), |ui| {
         let mut susp_lines: Vec<Line> = Vec::with_capacity(4);
         let mut forward_lines: Vec<Line> = Vec::with_capacity(4);
+        let mut side_impulse_lines: Vec<Line> = Vec::with_capacity(4);
 
         for (entity, wheel) in &wheels {
-            gizmos.line(
-                wheel.center,
-                wheel.center + wheel.wheel_axle_ws,
-                Color::PINK,
-            );
+            let states = state_history
+                .states
+                .iter()
+                .flat_map(|v| v.iter().filter_map(|w| (w.0 == entity).then_some(&w.1)));
 
-            gizmos.line(
-                wheel.center,
-                wheel.center + wheel.wheel_direction_ws,
-                if wheel.raycast_info.ground_object.is_some() {
-                    Color::GREEN
-                } else {
-                    Color::RED
-                },
-            );
-            gizmos.line(wheel.center, wheel.center + wheel.forward_ws, Color::PURPLE);
-            gizmos.line(
-                wheel.center,
-                wheel.center + (wheel.forward_impulse * wheel.forward_ws),
-                Color::BLUE,
-            );
-            gizmos.line(
-                wheel.center,
-                wheel.center + (wheel.side_impulse * wheel.axle),
-                Color::ORANGE,
-            );
+            let suspension_line = Line::new(PlotPoints::from_iter(
+                states
+                    .clone()
+                    .enumerate()
+                    .map(|(i, v)| [i as f64, v.wheel_suspension_force as f64]),
+            ))
+            .name(format!("Susp {entity:?}"));
 
-            let suspension_impulse = wheel.suspension_impulse(0.01);
-            gizmos.arrow(
-                wheel.raycast_info.contact_point_ws,
-                wheel.raycast_info.contact_point_ws + suspension_impulse,
-                Color::CYAN,
-            );
+            let forward_line = Line::new(PlotPoints::from_iter(
+                states
+                    .clone()
+                    .enumerate()
+                    .map(|(i, v)| [i as f64, v.forward_impulse as f64]),
+            ))
+            .name(format!("Forward {entity:?}"));
 
-            ui.vertical(|ui| {
-                ui.label(format!("entity: {entity:?}"));
+            let side_impulse_line = Line::new(PlotPoints::from_iter(
+                states
+                    .clone()
+                    .enumerate()
+                    .map(|(i, v)| [i as f64, v.side_impulse as f64]),
+            ))
+            .name(format!("Side {entity:?}"));
 
-                let states = state_history
-                    .states
-                    .iter()
-                    .flat_map(|v| v.iter().filter_map(|w| (w.0 == entity).then_some(&w.1)));
-
-                let suspension_line = Line::new(PlotPoints::from_iter(
-                    states
-                        .clone()
-                        .enumerate()
-                        .map(|(i, v)| [i as f64, v.wheel_suspension_force as f64]),
-                ))
-                .name(format!("Susp {entity:?}"));
-
-                let forward_line = Line::new(PlotPoints::from_iter(
-                    states
-                        .clone()
-                        .enumerate()
-                        .map(|(i, v)| [i as f64, v.forward_impulse as f64]),
-                ))
-                .name(format!("Forward {entity:?}"));
-
-                susp_lines.push(suspension_line);
-                forward_lines.push(forward_line);
-            });
-            // ui.label("world");
+            susp_lines.push(suspension_line);
+            forward_lines.push(forward_line);
+            side_impulse_lines.push(side_impulse_line);
         }
 
         ui.collapsing("Suspension", |ui| {
@@ -1493,6 +1505,21 @@ fn debug_wheels(
 
             plot.show(ui, |plot_ui| {
                 for line in forward_lines {
+                    plot_ui.line(line);
+                }
+            })
+        });
+
+        ui.collapsing("Side impulses", |ui| {
+            let plot = Plot::new("side_impulses")
+                .legend(Legend::default())
+                // .y_axis_width(4)
+                .show_axes(true)
+                .show_grid(true)
+                .coordinates_formatter(Corner::LeftBottom, CoordinatesFormatter::default());
+
+            plot.show(ui, |plot_ui| {
+                for line in side_impulse_lines {
                     plot_ui.line(line);
                 }
             })

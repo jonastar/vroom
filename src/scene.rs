@@ -1,5 +1,6 @@
 use bevy::{gltf::Gltf, prelude::*};
 use bevy_rapier3d::prelude::*;
+use transform_gizmo_bevy::GizmoCamera;
 
 use crate::{car::respawn_car_on_reset_action, loading::TextureAssets, GameState};
 
@@ -38,6 +39,7 @@ fn spawn_scene(
             ..default()
         },
         IsDefaultUiCamera,
+        GizmoCamera,
     ));
 
     let level = &gltf_assets.get(&textures.level).unwrap().scenes[0];

@@ -28,7 +28,8 @@ impl Plugin for CarPlugin {
                 (move_car_raycast, turn_front_wheels, apply_wheel_tuning),
             )
             .add_systems(
-                FixedUpdate,
+                Update,
+                // FixedUpdate,
                 (camera_look_at::<CarBody>).run_if(in_state(GameState::Playing)),
             );
         // .add_systems(
@@ -79,7 +80,7 @@ pub fn spawn_car_helper(
     let tuning = WheelTuning {
         suspension_stiffness: 20.0,
         suspension_compression: 1.0,
-        suspension_damping: 1.0,
+        suspension_damping: 5.0,
         max_suspension_travel: 0.25,
         side_friction_stiffness: 1.0,
         friction_slip: 1.5,

@@ -10,7 +10,7 @@ use bevy_rapier3d::{
     math::{Rot, Vect},
 };
 
-use crate::actions::Actions;
+use crate::{actions::Actions, map::Track};
 
 const TRACK_WIDTH: f32 = 20.0;
 const HALF_TRACK_WIDTH: f32 = TRACK_WIDTH / 2.0;
@@ -36,22 +36,136 @@ impl MeshGeneratorBuffers {
     }
 }
 
+pub fn generate_track_mesh(track: &Track) -> Option<Mesh> {
+    let Some(curve) = &track.built_curve else {
+        return None;
+    };
+
+    if track.bezier_segments.is_empty() {
+        return None;
+    }
+
+    let start_position = curve.position(0.0);
+
+    let mut previous_pos = start_position;
+    let mut previous_connection_points = default_connection_points(previous_pos);
+    // let mut previous_connection_points_world = default_connection_points(previous_pos);
+
+    let mut mesh_gen_buf = MeshGeneratorBuffers::default();
+    let mut indices = Vec::new();
+
+    for segment_index in 0..track.bezier_segments.len() {
+        let subdivisions = 100;
+
+        let start_rot = track.bezier_segments[segment_index][0].1;
+        let end_rot = track.bezier_segments[segment_index][3].1;
+
+        for sub_index in 0..subdivisions {
+            if segment_index == 0 && sub_index == 0 {
+                continue;
+            }
+
+            let local_t = sub_index as f32 / subdivisions as f32;
+            let global_t = segment_index as f32 + local_t;
+            let position = curve.position(global_t);
+
+            let center = ((position - previous_pos) / 2.0) + previous_pos;
+
+            let length = position.distance(previous_pos);
+            let interpolated_rot = start_rot.lerp(end_rot, local_t);
+            // gizmos.arrow(
+            //     center,
+            //     center + (interpolated_rot * Vec3::Y) * 10.0,
+            //     Color::RED,
+            // );
+            let spawn_transform = Transform::from_translation(center)
+                .looking_at(previous_pos, interpolated_rot * Vec3::Y);
+
+            // let inverted = spawn_transform.compute_affine().inverse();
+            // let cur_connection_points_local = [
+            //     inverted.transform_point(previous_connection_points_world[0]),
+            //     inverted.transform_point(previous_connection_points_world[1]),
+            //     inverted.transform_point(previous_connection_points_world[2]),
+            //     inverted.transform_point(previous_connection_points_world[3]),
+            // ];
+
+            let generate_back =
+                segment_index == track.bezier_segments.len() - 1 && sub_index == subdivisions - 1;
+
+            let next_connection_points = generate_segment_mesh_new(
+                &mut mesh_gen_buf,
+                &mut indices,
+                length,
+                previous_connection_points,
+                spawn_transform,
+                generate_back,
+                segment_index == 0 && sub_index == 1,
+            );
+            previous_connection_points = next_connection_points;
+
+            // let (mesh, collider, next_connection_points_local) =
+            //     generate_segment_mesh(length, cur_connection_points_local);
+
+            // let collider = Collider::from_bevy_mesh(
+            //     &mesh,
+            //     &ComputedColliderShape::ConvexDecomposition(VHACDParameters {
+            //         ..Default::default()
+            //     }),
+            // );
+
+            // previous_connection_points_world[0] =
+            //     spawn_transform.transform_point(next_connection_points_local[0]);
+            // previous_connection_points_world[1] =
+            //     spawn_transform.transform_point(next_connection_points_local[1]);
+            // previous_connection_points_world[2] =
+            //     spawn_transform.transform_point(next_connection_points_local[2]);
+            // previous_connection_points_world[3] =
+            //     spawn_transform.transform_point(next_connection_points_local[3]);
+
+            // another_builder.insert(collider);
+            // if let Some(collider) = collider {
+            //     another_builder.insert(collider);
+            // }
+
+            previous_pos = position;
+        }
+    }
+
+    let positions: Vec<_> = mesh_gen_buf.vertices.iter().map(|(p, _, _)| *p).collect();
+    let normals: Vec<_> = mesh_gen_buf.vertices.iter().map(|(_, n, _)| *n).collect();
+    let uvs: Vec<_> = mesh_gen_buf.vertices.iter().map(|(_, _, uv)| *uv).collect();
+
+    // mesh_gen_buf.clear();
+    Some(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+        .with_inserted_indices(Indices::U32(indices)),
+    )
+}
+
 pub fn generate_segment_mesh_new(
     buffers: &mut MeshGeneratorBuffers,
+    indices: &mut Vec<u32>,
     length: f32,
     connection_points: [Vec3; 4],
+    segment_transform: Transform,
     generate_front: bool,
     generate_back: bool,
-) -> (Mesh, [Vec3; 4]) {
+) -> [Vec3; 4] {
     let half_size = Vec3::new(HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, length / 2.0);
     let min = -half_size;
     let max = half_size;
 
     // Front is technically the back?
-    let front_top_right = Vec3::new(max.x, max.y, max.z);
-    let front_bottom_right = Vec3::new(max.x, min.y, max.z);
-    let front_top_left = Vec3::new(min.x, max.y, max.z);
-    let front_bottom_left = Vec3::new(min.x, min.y, max.z);
+    let front_top_right = segment_transform.transform_point(Vec3::new(max.x, max.y, max.z));
+    let front_bottom_right = segment_transform.transform_point(Vec3::new(max.x, min.y, max.z));
+    let front_top_left = segment_transform.transform_point(Vec3::new(min.x, max.y, max.z));
+    let front_bottom_left = segment_transform.transform_point(Vec3::new(min.x, min.y, max.z));
 
     let next_connection_points = [
         front_top_left,
@@ -72,24 +186,24 @@ pub fn generate_segment_mesh_new(
     let top_center = (front_top_left + front_top_right + back_top_left + back_top_right) / 4.0;
 
     // Suppose Y-up right hand, and camera look from +Z to -Z
-    let mut indices = Vec::with_capacity(100);
+    // let mut indices = Vec::with_capacity(100);
 
     let top_faces = subdivide_faces(
         front_top_left,
         front_top_right,
         back_top_right,
         back_top_left,
-        10,
+        15,
     );
 
     for face in top_faces {
-        insert_face(&mut buffers.vertices, &mut indices, face, Vec3::Y);
+        insert_face(&mut buffers.vertices, indices, face, Vec3::Y);
     }
 
     // Left
     insert_face(
         &mut buffers.vertices,
-        &mut indices,
+        indices,
         [
             front_top_left,
             back_top_left,
@@ -102,7 +216,7 @@ pub fn generate_segment_mesh_new(
     // Right
     insert_face(
         &mut buffers.vertices,
-        &mut indices,
+        indices,
         [
             back_top_right,
             front_top_right,
@@ -116,7 +230,7 @@ pub fn generate_segment_mesh_new(
     if generate_front {
         insert_face(
             &mut buffers.vertices,
-            &mut indices,
+            indices,
             [
                 front_bottom_left,
                 front_bottom_right,
@@ -131,7 +245,7 @@ pub fn generate_segment_mesh_new(
     if generate_back {
         insert_face(
             &mut buffers.vertices,
-            &mut indices,
+            indices,
             [
                 back_top_left,
                 back_top_right,
@@ -145,7 +259,7 @@ pub fn generate_segment_mesh_new(
     // Bottom
     insert_face(
         &mut buffers.vertices,
-        &mut indices,
+        indices,
         [
             back_bottom_left,
             back_bottom_right,
@@ -155,22 +269,24 @@ pub fn generate_segment_mesh_new(
         -Vec3::Z,
     );
 
-    let positions: Vec<_> = buffers.vertices.iter().map(|(p, _, _)| *p).collect();
-    let normals: Vec<_> = buffers.vertices.iter().map(|(_, n, _)| *n).collect();
-    let uvs: Vec<_> = buffers.vertices.iter().map(|(_, _, uv)| *uv).collect();
+    // let positions: Vec<_> = buffers.vertices.iter().map(|(p, _, _)| *p).collect();
+    // let normals: Vec<_> = buffers.vertices.iter().map(|(_, n, _)| *n).collect();
+    // let uvs: Vec<_> = buffers.vertices.iter().map(|(_, _, uv)| *uv).collect();
 
-    (
-        Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::default(),
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-        .with_inserted_indices(Indices::U32(indices)),
-        // collider,
-        next_connection_points,
-    )
+    // (
+    //     Mesh::new(
+    //         PrimitiveTopology::TriangleList,
+    //         RenderAssetUsages::default(),
+    //     )
+    //     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    //     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    //     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    //     .with_inserted_indices(Indices::U32(indices)),
+    //     // collider,
+    //     next_connection_points,
+    // )
+
+    next_connection_points
 }
 
 fn generate_segment_mesh(length: f32, connection_points: [Vec3; 4]) -> (Mesh, Collider, [Vec3; 4]) {
@@ -499,4 +615,17 @@ fn insert_face(
     indices.push(idx_offset + 2);
     indices.push(idx_offset + 3);
     indices.push(idx_offset);
+}
+
+fn default_connection_points(position: Vec3) -> [Vec3; 4] {
+    let next_connection_points = [
+        Vec3::new(-HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, 0.0) + position,
+        Vec3::new(HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, 0.0) + position,
+        Vec3::new(HALF_TRACK_WIDTH, -HALF_TRACK_HEIGHT, 0.0) + position,
+        Vec3::new(-HALF_TRACK_WIDTH, -HALF_TRACK_HEIGHT, 0.0) + position,
+    ];
+    // let transform = Transform::IDENTITY;
+
+    // transform.transform_point(point)
+    next_connection_points
 }

@@ -68,7 +68,7 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         let mut physics_config = RapierConfiguration::new(1.0);
         physics_config.timestep_mode = TimestepMode::Fixed {
-            dt: 1.0 / 60.0,
+            dt: 1.0 / 100.0,
             substeps: 1,
         };
 
@@ -78,9 +78,7 @@ impl Plugin for GamePlugin {
         };
 
         app.init_state::<GameState>()
-            .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f32(
-                1.0 / 60.0,
-            )))
+            .insert_resource(Time::<Fixed>::from_hz(100.0))
             .insert_resource(physics_config)
             .add_plugins((
                 RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule(),
@@ -96,7 +94,7 @@ impl Plugin for GamePlugin {
                 RaycastVehiclePlugin,
                 editor::EditorPlugin,
                 editor_ui::EditorUiPlugin,
-                EguiPlugin,
+                // EguiPlugin,
                 walker::SteppingPlugin::default()
                     .at(Val::Px(10.0), Val::Px(100.0))
                     .add_schedule(FixedUpdate),
@@ -107,7 +105,7 @@ impl Plugin for GamePlugin {
                 bevy_mod_picking::DefaultPickingPlugins,
                 TransformGizmoPlugin,
                 DefaultEditorCamPlugins,
-                // EditorPlugin::default(),
+                EditorPlugin::default(),
             ));
 
         #[cfg(debug_assertions)]
