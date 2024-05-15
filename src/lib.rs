@@ -3,6 +3,7 @@
 mod actions;
 mod audio;
 mod car;
+mod custom_physics_driver;
 mod editor;
 mod editor_ui;
 mod loading;
@@ -66,11 +67,16 @@ enum GameState {
 pub struct GamePlugin;
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        let mut physics_config = RapierConfiguration::new(1.0);
-        physics_config.timestep_mode = TimestepMode::Fixed {
-            dt: 1.0 / 100.0,
-            substeps: 1,
-        };
+        // let mut physics_config = RapierConfiguration::new(1.0);
+        // // physics_config.timestep_mode = TimestepMode::Fixed {
+        // //     dt: 1.0 / 100.0,
+        // //     substeps: 1,
+        // // };
+        // physics_config.timestep_mode = TimestepMode::Interpolated {
+        //     dt: 1.0 / 100.0,
+        //     substeps: 1,
+        //     time_scale: 1.0,
+        // };
 
         let gizmo_options = GizmoOptions {
             gizmo_modes: EnumSet::from_iter(vec![GizmoMode::Rotate, GizmoMode::Translate]),
@@ -79,9 +85,10 @@ impl Plugin for GamePlugin {
 
         app.init_state::<GameState>()
             .insert_resource(Time::<Fixed>::from_hz(100.0))
-            .insert_resource(physics_config)
+            // .insert_resource(physics_config)
             .add_plugins((
-                RapierPhysicsPlugin::<NoUserData>::default().in_fixed_schedule(),
+                // RapierPhysicsPlugin::<NoUserData>::default().in_schedule(Update),
+                custom_physics_driver::CustomPhysicsDriverPlugin,
                 RapierDebugRenderPlugin::default(),
                 LoadingPlugin,
                 MenuPlugin,

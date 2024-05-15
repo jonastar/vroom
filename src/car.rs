@@ -24,11 +24,11 @@ impl Plugin for CarPlugin {
             .add_systems(OnEnter(GameState::Playing), spawn_car)
             .add_systems(OnExit(GameState::Playing), despawn_car)
             .add_systems(
-                FixedUpdate,
+                Update,
                 (move_car_raycast, turn_front_wheels, apply_wheel_tuning),
             )
             .add_systems(
-                Update,
+                PostUpdate,
                 // FixedUpdate,
                 (camera_look_at::<CarBody>).run_if(in_state(GameState::Playing)),
             );

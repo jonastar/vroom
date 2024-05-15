@@ -15,7 +15,8 @@ use bevy_rapier3d::plugin::{PhysicsSet, RapierContext};
 use bevy_rapier3d::rapier::dynamics::{RigidBody, RigidBodyHandle};
 use bevy_rapier3d::rapier::math::Real;
 use egui_plot::{CoordinatesFormatter, Corner, Legend, Line, Plot, PlotPoints};
-use transform_gizmo_bevy::gizmo;
+
+use crate::custom_physics_driver::PhysicsStepSchedule;
 
 pub struct RaycastVehiclePlugin;
 
@@ -26,10 +27,10 @@ impl Plugin for RaycastVehiclePlugin {
             .register_type::<WheelTuning>()
             .add_systems(Update, debug_wheels)
             .add_systems(
-                FixedUpdate,
+                PhysicsStepSchedule,
                 (update_vehicles, update_wheel_visuals)
                     .chain()
-                    .after(PhysicsSet::Writeback),
+                    .after(PhysicsSet::StepSimulation),
             );
     }
 }

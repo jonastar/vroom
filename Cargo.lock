@@ -1357,8 +1357,7 @@ checksum = "8050e2869fe341db6874203b5a01ff12673807a2c7c80cb829f6c7bea6997268"
 [[package]]
 name = "bevy_rapier3d"
 version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56691c8fbd7a8614368011bad8736789bb36176f49fc19fd6f3627322134659b"
+source = "git+https://github.com/jonastar/bevy_rapier.git?branch=always-inerpolate#f9ed7a0995a3b59565298d2e122a726bea3cf4a1"
 dependencies = [
  "bevy",
  "bitflags 2.5.0",
