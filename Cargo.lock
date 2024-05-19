@@ -921,6 +921,7 @@ dependencies = [
  "egui_plot",
  "embed-resource",
  "image",
+ "nalgebra",
  "rand",
  "rfd",
  "serde",

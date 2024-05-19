@@ -1,8 +1,17 @@
-use bevy::{math::cubic_splines::CubicCurve, pbr::wireframe::Wireframe, prelude::*};
-use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
+use bevy::{
+    math::cubic_splines::CubicCurve,
+    pbr::wireframe::Wireframe,
+    prelude::*,
+    render::mesh::{Indices, VertexAttributeValues},
+};
+use bevy_rapier3d::{
+    geometry::{Collider, ComputedColliderShape, TriMeshFlags},
+    parry::shape::SharedShape,
+};
 
 use crate::{
     editor::StartPoint,
+    extract_vertices_from_mesh::extract_mesh_vertices_indices,
     map_file::{LoadMap, MapFile, PrepareSaveMap, SavedTrack},
     track_mesh::{generate_track_mesh, RotatedSeam},
 };
@@ -165,6 +174,7 @@ fn generate_tracks(
                 &boxes,
                 &mut meshes,
                 &mut materials,
+                &mut gizmos,
                 entity,
                 track,
                 children,
@@ -179,6 +189,7 @@ fn generate_tracks(
                 &boxes,
                 &mut meshes,
                 &mut materials,
+                &mut gizmos,
                 entity,
                 track,
                 children,
@@ -195,6 +206,8 @@ fn generate_track(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
 
+    gizmos: &mut Gizmos,
+
     entity: Entity,
     track: &Track,
     children: &Children,
@@ -207,12 +220,20 @@ fn generate_track(
     }
 
     commands.entity(entity).with_children(|builder| {
-        let mesh = generate_track_mesh(&track);
+        let mesh = generate_track_mesh(&track, gizmos);
         let Some(mesh) = mesh else {
             dbg!("No mesh");
             return;
         };
-        let collider = Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh);
+
+        let collider: Option<Collider> = extract_mesh_vertices_indices(&mesh).map(|(vtx, idx)| {
+            SharedShape::trimesh_with_flags(
+                vtx,
+                idx,
+                TriMeshFlags::MERGE_DUPLICATE_VERTICES | TriMeshFlags::FIX_INTERNAL_EDGES, // | TriMeshFlags::ORIENTED,
+            )
+            .into()
+        });
 
         let mut another_builder = builder.spawn((
             PbrBundle {

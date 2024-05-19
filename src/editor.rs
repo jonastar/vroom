@@ -82,7 +82,7 @@ fn spawn_editor(
             last_anchor_depth: 2.0,
             ..Default::default()
         },
-        // IsDefaultUiCamera,
+        IsDefaultUiCamera,
     ));
 
     commands.spawn(DirectionalLightBundle {
@@ -283,7 +283,7 @@ fn try_map(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     info!("Spawned car");
-    let start = query.single();
+    let start = query.iter().next().unwrap();
     spawn_car_helper(
         start.translation,
         start.rotation,

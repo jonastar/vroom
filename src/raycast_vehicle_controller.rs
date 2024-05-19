@@ -1172,7 +1172,7 @@ pub fn update_vehicles(
     mut controllers: Query<(
         Entity,
         &mut DynamicRayCastVehicleController,
-        &Transform,
+        // &Transform,
         &mut Velocity,
         &ReadMassProperties,
         &Children,
@@ -1188,7 +1188,7 @@ pub fn update_vehicles(
     for (
         chassis_entity,
         mut controller,
-        transform,
+        // transform,
         chassis_vel,
         mass_props,
         children,
@@ -1199,8 +1199,20 @@ pub fn update_vehicles(
     {
         // let wheels = children.iter().find_map(wheels.g)
 
+        let Some(body) = rapier_context.bodies.get(rigidbody_handle.0) else {
+            continue;
+        };
+
+        let position = body.position();
+        let transform: Transform = Transform::from_rotation(position.rotation.into())
+            .with_translation(position.translation.into());
+        // Transform
+
+        // position.
+
         controller.current_vehicle_speed = Vector3::from(chassis_vel.linvel).norm();
-        let forward = -transform.forward();
+
+        let forward = transform.forward();
         if forward.dot(chassis_vel.linvel) < 0.0 {
             controller.current_vehicle_speed *= -1.0;
         }

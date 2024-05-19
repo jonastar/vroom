@@ -6,6 +6,7 @@ mod car;
 mod custom_physics_driver;
 mod editor;
 mod editor_ui;
+mod extract_vertices_from_mesh;
 mod loading;
 mod map;
 mod map_file;
@@ -89,7 +90,7 @@ impl Plugin for GamePlugin {
             .add_plugins((
                 // RapierPhysicsPlugin::<NoUserData>::default().in_schedule(Update),
                 custom_physics_driver::CustomPhysicsDriverPlugin,
-                RapierDebugRenderPlugin::default(),
+                // RapierDebugRenderPlugin::default(),
                 LoadingPlugin,
                 MenuPlugin,
                 ActionsPlugin,

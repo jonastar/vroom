@@ -36,7 +36,7 @@ impl MeshGeneratorBuffers {
     }
 }
 
-pub fn generate_track_mesh(track: &Track) -> Option<Mesh> {
+pub fn generate_track_mesh(track: &Track, gizmos: &mut Gizmos) -> Option<Mesh> {
     let Some(curve) = &track.built_curve else {
         return None;
     };
@@ -100,6 +100,7 @@ pub fn generate_track_mesh(track: &Track) -> Option<Mesh> {
                 spawn_transform,
                 generate_back,
                 segment_index == 0 && sub_index == 1,
+                gizmos,
             );
             previous_connection_points = next_connection_points;
 
@@ -156,6 +157,7 @@ pub fn generate_segment_mesh_new(
     segment_transform: Transform,
     generate_front: bool,
     generate_back: bool,
+    gizmos: &mut Gizmos,
 ) -> [Vec3; 4] {
     let half_size = Vec3::new(HALF_TRACK_WIDTH, HALF_TRACK_HEIGHT, length / 2.0);
     let min = -half_size;
@@ -197,7 +199,7 @@ pub fn generate_segment_mesh_new(
     );
 
     for face in top_faces {
-        insert_face(&mut buffers.vertices, indices, face, Vec3::Y);
+        insert_face(&mut buffers.vertices, indices, face, gizmos);
     }
 
     // Left
@@ -210,7 +212,7 @@ pub fn generate_segment_mesh_new(
             back_bottom_left,
             front_bottom_left,
         ],
-        -Vec3::X,
+        gizmos,
     );
 
     // Right
@@ -223,7 +225,7 @@ pub fn generate_segment_mesh_new(
             front_bottom_right,
             back_bottom_right,
         ],
-        Vec3::X,
+        gizmos,
     );
 
     // Front
@@ -237,7 +239,7 @@ pub fn generate_segment_mesh_new(
                 front_top_right,
                 front_top_left,
             ],
-            Vec3::Z,
+            gizmos,
         );
     }
 
@@ -252,7 +254,7 @@ pub fn generate_segment_mesh_new(
                 back_bottom_right,
                 back_bottom_left,
             ],
-            -Vec3::Z,
+            gizmos,
         );
     }
 
@@ -266,7 +268,7 @@ pub fn generate_segment_mesh_new(
             front_bottom_right,
             front_bottom_left,
         ],
-        -Vec3::Z,
+        gizmos,
     );
 
     // let positions: Vec<_> = buffers.vertices.iter().map(|(p, _, _)| *p).collect();
@@ -599,14 +601,44 @@ fn insert_face(
     vertices: &mut Vec<([f32; 3], [f32; 3], [f32; 2])>,
     indices: &mut Vec<u32>,
     corners: [Vec3; 4],
-    up: Vec3,
+    gizmos: &mut Gizmos,
 ) {
     let idx_offset = vertices.len() as u32;
 
-    vertices.push((corners[0].to_array(), up.to_array(), [0.0, 0.0]));
-    vertices.push((corners[1].to_array(), up.to_array(), [0.0, 0.0]));
-    vertices.push((corners[2].to_array(), up.to_array(), [0.0, 0.0]));
-    vertices.push((corners[3].to_array(), up.to_array(), [0.0, 0.0]));
+    let normal_face_1 = tri_normal(corners[0], corners[1], corners[2]);
+    let normal_face_2 = tri_normal(corners[2], corners[3], corners[0]);
+
+    let combined_normal = (normal_face_1 + normal_face_2).normalize();
+
+    let center_1 = (corners[0] + corners[1] + corners[2]) / 3.0;
+    let center_2 = (corners[2] + corners[3] + corners[0]) / 3.0;
+    gizmos.arrow(center_1, center_1 + normal_face_1.normalize(), Color::PINK);
+    gizmos.arrow(
+        center_2,
+        center_2 + normal_face_2.normalize(),
+        Color::TOMATO,
+    );
+
+    vertices.push((
+        corners[0].to_array(),
+        combined_normal.to_array(),
+        [0.0, 0.0],
+    ));
+    vertices.push((
+        corners[1].to_array(),
+        normal_face_1.normalize().to_array(),
+        [0.0, 0.0],
+    ));
+    vertices.push((
+        corners[2].to_array(),
+        combined_normal.to_array(),
+        [0.0, 0.0],
+    ));
+    vertices.push((
+        corners[3].to_array(),
+        normal_face_2.normalize().to_array(),
+        [0.0, 0.0],
+    ));
 
     indices.push(idx_offset);
     indices.push(idx_offset + 1);
@@ -615,6 +647,12 @@ fn insert_face(
     indices.push(idx_offset + 2);
     indices.push(idx_offset + 3);
     indices.push(idx_offset);
+
+    // 0.0 0.0
+}
+
+fn tri_normal(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+    (b - a).cross(c - a)
 }
 
 fn default_connection_points(position: Vec3) -> [Vec3; 4] {
