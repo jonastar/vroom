@@ -25,10 +25,11 @@ impl Plugin for RaycastVehiclePlugin {
         app.register_type::<DynamicRayCastVehicleController>()
             .register_type::<Wheel>()
             .register_type::<WheelTuning>()
-            .add_systems(Update, debug_wheels)
+            .insert_resource(DebugWheelStates::default())
+            .add_systems(Update, (debug_wheels, plot_wheels))
             .add_systems(
                 PhysicsStepSchedule,
-                (update_vehicles, update_wheel_visuals)
+                (update_vehicles, update_wheel_visuals, update_wheel_history)
                     .chain()
                     .after(PhysicsSet::StepSimulation),
             );
@@ -990,8 +991,8 @@ impl DynamicRayCastVehicleController {
                 if wheel.side_impulse != 0.0 {
                     if wheel.skid_info < 1.0 {
                         wheel.forward_impulse *= wheel.skid_info;
-                        let delta = wheel.side_impulse - (wheel.side_impulse * wheel.skid_info);
-                        wheel.side_impulse -= delta / 1.2;
+                        // let delta = wheel.side_impulse - (wheel.side_impulse * wheel.skid_info);
+                        // wheel.side_impulse -= delta / 1.2;
                     }
                 }
             }
@@ -1141,7 +1142,8 @@ fn resolve_single_bilateral(
     let rel_vel = normal.dot((dvel).into());
 
     //todo: move this into proper structure
-    let contact_damping = 0.2;
+    // let contact_damping = 0.2;
+    let contact_damping = 1.0;
     -contact_damping * rel_vel * jac_diag_ab_inv
 }
 
@@ -1387,7 +1389,7 @@ pub(crate) fn inv(val: Real) -> Real {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Resource)]
 struct DebugWheelStates {
     states: VecDeque<Vec<(Entity, Wheel)>>,
 }
@@ -1434,16 +1436,11 @@ fn debug_wheels(wheels: Query<&Wheel>, mut gizmos: Gizmos) {
     }
 }
 
-fn plot_wheels(
+fn update_wheel_history(
     wheels: Query<(Entity, &Wheel)>,
-    mut contexts: EguiContexts,
-    mut state_history: Local<DebugWheelStates>,
+    mut state_history: ResMut<DebugWheelStates>,
 ) {
-    if wheels.is_empty() {
-        return;
-    }
-
-    let mut this_frame = Vec::with_capacity(10);
+    let mut this_frame = Vec::with_capacity(4);
     for (entity, wheel) in &wheels {
         this_frame.push((entity, wheel.clone()));
     }
@@ -1451,6 +1448,16 @@ fn plot_wheels(
     state_history.states.push_back(this_frame);
     while state_history.states.len() > 1000 {
         state_history.states.pop_front();
+    }
+}
+
+fn plot_wheels(
+    wheels: Query<(Entity, &Wheel)>,
+    mut contexts: EguiContexts,
+    mut state_history: Res<DebugWheelStates>,
+) {
+    if wheels.is_empty() {
+        return;
     }
 
     egui::Window::new("Wheels").show(contexts.ctx_mut(), |ui| {

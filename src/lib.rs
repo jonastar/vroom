@@ -102,7 +102,7 @@ impl Plugin for GamePlugin {
                 RaycastVehiclePlugin,
                 editor::EditorPlugin,
                 editor_ui::EditorUiPlugin,
-                // EguiPlugin,
+                EguiPlugin,
                 walker::SteppingPlugin::default()
                     .at(Val::Px(10.0), Val::Px(100.0))
                     .add_schedule(FixedUpdate),
@@ -113,7 +113,7 @@ impl Plugin for GamePlugin {
                 bevy_mod_picking::DefaultPickingPlugins,
                 TransformGizmoPlugin,
                 DefaultEditorCamPlugins,
-                EditorPlugin::default(),
+                // EditorPlugin::default(),
             ));
 
         #[cfg(debug_assertions)]
