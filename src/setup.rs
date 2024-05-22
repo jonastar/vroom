@@ -3,6 +3,8 @@ use clap::{Parser, ValueEnum};
 
 use crate::GameState;
 
+pub const BUILTIN_TRACK: &[u8] = include_bytes!("../debug");
+
 pub struct SetupPlugin {
     pub args: Args,
 }

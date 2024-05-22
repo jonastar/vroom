@@ -1,4 +1,6 @@
 use crate::loading::TextureAssets;
+use crate::map_file::LoadMapDataCommand;
+use crate::setup::BUILTIN_TRACK;
 use crate::GameState;
 use bevy::prelude::*;
 
@@ -192,6 +194,7 @@ struct ChangeState(GameState);
 struct OpenLink(&'static str);
 
 fn click_play_button(
+    mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
     mut interaction_query: Query<
         (
@@ -209,6 +212,9 @@ fn click_play_button(
             Interaction::Pressed => {
                 if let Some(state) = change_state {
                     next_state.set(state.0.clone());
+                    commands.add(LoadMapDataCommand {
+                        data: Vec::from(BUILTIN_TRACK),
+                    });
                 } else if let Some(link) = open_link {
                     if let Err(error) = webbrowser::open(link.0) {
                         warn!("Failed to open link {error:?}");

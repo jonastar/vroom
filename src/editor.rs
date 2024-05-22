@@ -54,7 +54,7 @@ impl Plugin for EditorPlugin {
                     .after(build_segment_curves),
             )
             .add_systems(
-                FixedUpdate,
+                PostUpdate,
                 (camera_look_at::<CarBody>).run_if(in_state(EditorState::Testing)),
             );
     }

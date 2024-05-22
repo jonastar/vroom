@@ -13,7 +13,8 @@ pub struct CarPlugin;
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 pub struct Car {
-    wheel_tuning: WheelTuning,
+    wheel_tuning_front: WheelTuning,
+    wheel_tuning_rear: WheelTuning,
 }
 
 /// This plugin handles player related stuff like movement
@@ -77,20 +78,31 @@ pub fn spawn_car_helper(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
 ) {
-    let tuning = WheelTuning {
+    let tuning_front = WheelTuning {
         suspension_stiffness: 20.0,
         suspension_compression: 1.0,
         suspension_damping: 5.0,
         max_suspension_travel: 0.25,
         side_friction_stiffness: 1.0,
-        friction_slip: 1.5,
-        max_suspension_force: 1000.0,
+        friction_slip: 2.0,
+        max_suspension_force: 2000.0,
+    };
+
+    let tuning_rear = WheelTuning {
+        suspension_stiffness: 20.0,
+        suspension_compression: 1.0,
+        suspension_damping: 5.0,
+        max_suspension_travel: 0.25,
+        side_friction_stiffness: 1.0,
+        friction_slip: 2.1,
+        max_suspension_force: 2000.0,
     };
 
     commands
         .spawn((
             Car {
-                wheel_tuning: tuning.clone(),
+                wheel_tuning_front: tuning_front.clone(),
+                wheel_tuning_rear: tuning_rear.clone(),
             },
             // SpatialBundle::from_transform(Transform::from_translation(START_POSITION)),
             PbrBundle {
@@ -179,7 +191,7 @@ pub fn spawn_car_helper(
                     z: -1.0,
                 },
                 Wheel::FrontLeft,
-                tuning.clone(),
+                tuning_front.clone(),
             );
 
             spawn_wheel(
@@ -193,7 +205,7 @@ pub fn spawn_car_helper(
                     z: -1.0,
                 },
                 Wheel::FrontRight,
-                tuning.clone(),
+                tuning_front.clone(),
             );
 
             // Back wheels
@@ -209,7 +221,7 @@ pub fn spawn_car_helper(
                     z: 1.0,
                 },
                 Wheel::RearLeft,
-                tuning.clone(),
+                tuning_rear.clone(),
             );
 
             spawn_wheel(
@@ -223,7 +235,7 @@ pub fn spawn_car_helper(
                     z: 1.0,
                 },
                 Wheel::RearRight,
-                tuning.clone(),
+                tuning_rear.clone(),
             );
         });
 }
@@ -338,7 +350,7 @@ fn move_car_raycast(
             continue;
         }
 
-        let engine_force = input.y * 1000.0;
+        let engine_force = input.y * 300.0;
 
         wheel.engine_force = engine_force;
     }
@@ -354,7 +366,7 @@ fn turn_front_wheels(
     mut car_query: Query<(&mut crate::raycast_vehicle_controller::Wheel, &Wheel)>,
 ) {
     let x_input = actions.player_movement.map(|v| v.x).unwrap_or_default();
-    *steering_wheel = steering_wheel.lerp(x_input, time.delta_seconds() * 10.0);
+    *steering_wheel = steering_wheel.lerp(x_input, time.delta_seconds() * 5.0);
 
     let Ok((body_transform, body_vel)) = cat_bodies.get_single() else {
         return;
@@ -383,15 +395,19 @@ fn turn_front_wheels(
 
 fn apply_wheel_tuning(
     cars: Query<(&Car, &Children), Changed<Car>>,
-    mut wheels: Query<&mut crate::raycast_vehicle_controller::Wheel>,
+    mut wheels: Query<(&mut crate::raycast_vehicle_controller::Wheel, &Wheel)>,
 ) {
     for (car, children) in &cars {
         for child in children.iter() {
-            let Ok(mut wheel) = wheels.get_mut(*child) else {
+            let Ok((mut wheel, wheel_desc)) = wheels.get_mut(*child) else {
                 continue;
             };
 
-            wheel.apply_tuning(&car.wheel_tuning);
+            if wheel_desc.is_front() {
+                wheel.apply_tuning(&car.wheel_tuning_front);
+            } else {
+                wheel.apply_tuning(&car.wheel_tuning_rear);
+            }
         }
     }
 }

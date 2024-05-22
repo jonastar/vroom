@@ -26,7 +26,7 @@ impl Plugin for RaycastVehiclePlugin {
             .register_type::<Wheel>()
             .register_type::<WheelTuning>()
             .insert_resource(DebugWheelStates::default())
-            .add_systems(Update, (debug_wheels, plot_wheels))
+            .add_systems(Update, (debug_wheels))
             .add_systems(
                 PhysicsStepSchedule,
                 (update_vehicles, update_wheel_visuals, update_wheel_history)
@@ -991,6 +991,8 @@ impl DynamicRayCastVehicleController {
                 if wheel.side_impulse != 0.0 {
                     if wheel.skid_info < 1.0 {
                         wheel.forward_impulse *= wheel.skid_info;
+                        wheel.side_impulse *= wheel.skid_info;
+                        // wheel.side_impulse *= wheel.skid_info;
                         // let delta = wheel.side_impulse - (wheel.side_impulse * wheel.skid_info);
                         // wheel.side_impulse -= delta / 1.2;
                     }
@@ -1120,32 +1122,84 @@ fn resolve_single_bilateral(
     pt1: &Point,
     body2: &RigidBody,
     pt2: &Point,
-    normal: &Vec3,
+    collision_normal: &Vec3,
 ) -> Real {
-    let vel1 = body1.velocity_at_point(&(*pt1).into());
-    let vel2 = body2.velocity_at_point(&(*pt2).into());
-    let dvel = vel1 - vel2;
+    // Calculate the velocities of the two bodies at the collision points
+    let body1_velocity_at_pt1 = body1.velocity_at_point(&(*pt1).into());
+    let body2_velocity_at_pt2 = body2.velocity_at_point(&(*pt2).into());
+    let velocity_difference = body1_velocity_at_pt1 - body2_velocity_at_pt2;
 
-    let dpt1 = bevy_rapier3d::parry::math::Point::<f32>::from(*pt1) - body1.center_of_mass();
-    let dpt2 = bevy_rapier3d::parry::math::Point::<f32>::from(*pt2) - body2.center_of_mass();
-    let aj = dpt1.cross(&(*normal).into());
-    let bj = dpt2.cross(&(-*normal).into());
-    let iaj = body1.mass_properties().effective_world_inv_inertia_sqrt * aj;
-    let ibj = body2.mass_properties().effective_world_inv_inertia_sqrt * bj;
+    // Calculate the differences in position between the collision points and the centers of mass
+    let position_difference_body1 =
+        bevy_rapier3d::parry::math::Point::<f32>::from(*pt1) - body1.center_of_mass();
+    let position_difference_body2 =
+        bevy_rapier3d::parry::math::Point::<f32>::from(*pt2) - body2.center_of_mass();
 
-    // TODO: take the effective_inv_mass into account?
-    let im1 = body1.mass_properties().local_mprops.inv_mass;
-    let im2 = body2.mass_properties().local_mprops.inv_mass;
+    // Compute the angular momentum changes due to the collision
+    let angular_impulse_change_body1 = position_difference_body1.cross(&(*collision_normal).into());
+    let angular_impulse_change_body2 =
+        position_difference_body2.cross(&(-(*collision_normal)).into());
 
-    let jac_diag_ab = im1 + im2 + iaj.dot(&iaj) + ibj.dot(&ibj);
-    let jac_diag_ab_inv = inv(jac_diag_ab);
-    let rel_vel = normal.dot((dvel).into());
+    // Calculate the angular impulse contributions using the effective world inverse inertia square root
+    let angular_impulse_contribution_body1 =
+        body1.mass_properties().effective_world_inv_inertia_sqrt * angular_impulse_change_body1;
+    let angular_impulse_contribution_body2 =
+        body2.mass_properties().effective_world_inv_inertia_sqrt * angular_impulse_change_body2;
 
-    //todo: move this into proper structure
-    // let contact_damping = 0.2;
-    let contact_damping = 1.0;
-    -contact_damping * rel_vel * jac_diag_ab_inv
+    // Calculate the inverse masses of the bodies
+    let inverse_mass_body1 = body1.mass_properties().local_mprops.inv_mass;
+    let inverse_mass_body2 = body2.mass_properties().local_mprops.inv_mass;
+
+    // Calculate the diagonal elements of the Jacobian matrix
+    let jacobian_diagonal_element = inverse_mass_body1
+        + inverse_mass_body2
+        + angular_impulse_contribution_body1.dot(&angular_impulse_contribution_body1)
+        + angular_impulse_contribution_body2.dot(&angular_impulse_contribution_body2);
+
+    // Invert the Jacobian diagonal element
+    let jacobian_diagonal_element_inverse = inv(jacobian_diagonal_element);
+
+    // Calculate the component of velocity along the collision normal
+    let relative_velocity_component = collision_normal.dot(velocity_difference.into());
+
+    // Apply contact damping to simulate energy loss due to the collision
+    let contact_damping_factor = 1.0; // Placeholder for actual damping value
+
+    // Return the calculated impulse magnitude adjusted by the relative velocity and the inverted Jacobian element
+    -contact_damping_factor * relative_velocity_component * jacobian_diagonal_element_inverse
 }
+
+// fn resolve_single_bilateral(
+//     body1: &RigidBody,
+//     pt1: &Point,
+//     body2: &RigidBody,
+//     pt2: &Point,
+//     normal: &Vec3,
+// ) -> Real {
+//     let vel1 = body1.velocity_at_point(&(*pt1).into());
+//     let vel2 = body2.velocity_at_point(&(*pt2).into());
+//     let dvel = vel1 - vel2;
+
+//     let dpt1 = bevy_rapier3d::parry::math::Point::<f32>::from(*pt1) - body1.center_of_mass();
+//     let dpt2 = bevy_rapier3d::parry::math::Point::<f32>::from(*pt2) - body2.center_of_mass();
+//     let aj = dpt1.cross(&(*normal).into());
+//     let bj = dpt2.cross(&(-*normal).into());
+//     let iaj = body1.mass_properties().effective_world_inv_inertia_sqrt * aj;
+//     let ibj = body2.mass_properties().effective_world_inv_inertia_sqrt * bj;
+
+//     // TODO: take the effective_inv_mass into account?
+//     let im1 = body1.mass_properties().local_mprops.inv_mass;
+//     let im2 = body2.mass_properties().local_mprops.inv_mass;
+
+//     let jac_diag_ab = im1 + im2 + iaj.dot(&iaj) + ibj.dot(&ibj);
+//     let jac_diag_ab_inv = inv(jac_diag_ab);
+//     let rel_vel = normal.dot((dvel).into());
+
+//     //todo: move this into proper structure
+//     // let contact_damping = 0.2;
+//     let contact_damping = 1.0;
+//     -contact_damping * rel_vel * jac_diag_ab_inv
+// }
 
 fn resolve_single_unilateral(body1: &RigidBody, pt1: &Point, normal: &Vec3) -> Real {
     let pt1 = bevy_rapier3d::parry::math::Point::<f32>::from(*pt1);
