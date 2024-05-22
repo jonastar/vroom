@@ -9,7 +9,8 @@ permissions:
 jobs:
   build-web:
     runs-on: ubuntu-latest
-
+    env:
+      RUSTFLAGS: --cfg=web_sys_unstable_apis
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -22,7 +23,7 @@ jobs:
       - name: Install trunk
         uses: jetli/trunk-action@v0.4.0
         with:
-          version: 'latest'
+          version: "latest"
       - name: Add wasm target
         run: |
           rustup target add wasm32-unknown-unknown
