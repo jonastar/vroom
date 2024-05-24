@@ -28,6 +28,10 @@ pub struct Actions {
     pub try_map: bool,
     pub toggle_seam: bool,
     pub escape: bool,
+
+    pub camera_1: bool,
+    pub camera_2: bool,
+    pub camera_3: bool,
 }
 
 pub fn set_movement_actions(
@@ -66,4 +70,8 @@ pub fn set_movement_actions(
     actions.try_map = keyboard_input.just_pressed(KeyCode::KeyK);
     actions.toggle_seam = keyboard_input.just_pressed(KeyCode::KeyT);
     actions.escape = keyboard_input.just_pressed(KeyCode::Escape);
+
+    actions.camera_1 = keyboard_input.just_pressed(KeyCode::Digit1);
+    actions.camera_2 = keyboard_input.just_pressed(KeyCode::Digit2);
+    actions.camera_3 = keyboard_input.just_pressed(KeyCode::Digit3);
 }

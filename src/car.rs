@@ -1,8 +1,8 @@
 use crate::{
     actions::Actions,
+    camera_controller::camera_look_at,
     editor::StartPoint,
     raycast_vehicle_controller::{DynamicRayCastVehicleController, WheelDesc, WheelTuning},
-    scene::camera_look_at,
     GameState,
 };
 use bevy::prelude::*;

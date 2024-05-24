@@ -2,6 +2,7 @@
 
 mod actions;
 mod audio;
+mod camera_controller;
 mod car;
 mod custom_physics_driver;
 mod editor;
@@ -20,8 +21,6 @@ mod track_mesh;
 mod ui_util;
 mod walker;
 
-use std::time::Duration;
-
 use crate::actions::ActionsPlugin;
 use crate::audio::InternalAudioPlugin;
 use crate::loading::LoadingPlugin;
@@ -33,11 +32,7 @@ use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_editor_cam::DefaultEditorCamPlugins;
 use bevy_editor_pls::EditorPlugin;
-use bevy_egui::EguiPlugin;
-use bevy_rapier3d::{
-    plugin::{NoUserData, RapierConfiguration, RapierPhysicsPlugin, TimestepMode},
-    render::RapierDebugRenderPlugin,
-};
+
 use car::CarPlugin;
 use raycast_vehicle_controller::RaycastVehiclePlugin;
 use scene::ScenePlugin;
@@ -102,6 +97,7 @@ impl Plugin for GamePlugin {
                 RaycastVehiclePlugin,
                 editor::EditorPlugin,
                 editor_ui::EditorUiPlugin,
+                camera_controller::CameraControllerPlugin,
                 // EguiPlugin,
                 walker::SteppingPlugin::default()
                     .at(Val::Px(10.0), Val::Px(100.0))

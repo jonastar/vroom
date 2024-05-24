@@ -19,9 +19,9 @@ enum EditorState {
 
 use crate::{
     actions::Actions,
+    camera_controller::camera_look_at,
     car::{respawn_car_on_reset_action, spawn_car_helper, CarBody},
     map::{points_to_bezier_segments, Track},
-    scene::camera_look_at,
     GameState,
 };
 
